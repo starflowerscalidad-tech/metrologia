@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Módulo de Metrología</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+:root{
+  --bg:#f4f6f8;--card:#ffffff;--text:#1d2733;--muted:#5d6b7a;--line:#d9e0e7;
+  --primary:#0b6bcb;--primary-text:#fff;--danger:#c62828;--ok:#2e7d32;--warn:#ef8f00;--grey:#6b7280;
+  --input:#fff;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){--bg:#11161c;--card:#1a222b;--text:#e6edf3;--muted:#9aa8b6;--line:#2c3743;--input:#121920;--primary:#3d8fe0}
+}
+:root[data-theme="dark"]{--bg:#11161c;--card:#1a222b;--text:#e6edf3;--muted:#9aa8b6;--line:#2c3743;--input:#121920;--primary:#3d8fe0}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;z-index:1000;background:var(--card);border-bottom:1px solid var(--line);padding:10px 16px}
+header h1{margin:0 0 8px;font-size:18px}
+nav{display:flex;gap:6px;flex-wrap:wrap}
+nav button{flex:1;min-width:70px;padding:10px 6px}
+main{max-width:1100px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+label{display:block;font-size:13px;color:var(--muted);margin-bottom:4px;font-weight:600}
+input,select{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--input);color:var(--text);font-size:15px}
+input[readonly]{opacity:.85}
+.row{display:flex;gap:8px;align-items:center}
+.row>input{flex:1}
+button{padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font-size:15px;cursor:pointer}
+button.primary,nav button.active{background:var(--primary);color:var(--primary-text);border-color:var(--primary)}
+button.danger{color:var(--danger);border-color:var(--danger)}
+button.small{padding:6px 10px;font-size:13px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.hint{font-size:12px;color:var(--muted);margin-top:4px}
+.gps-box{border:1px dashed var(--line);border-radius:8px;padding:12px}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;color:#fff}
+.b-Activo{background:var(--ok)}.b-Inactivo{background:var(--warn)}.b-Obsoleto{background:var(--grey)}
+.filters{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid var(--line);border-radius:999px;cursor:pointer;font-size:14px;color:var(--text);font-weight:400;margin:0;user-select:none}
+.chip input{display:none}
+.chip.on{background:var(--primary);color:var(--primary-text);border-color:var(--primary)}
+@media (max-width:600px){.filters{grid-template-columns:1fr}}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{color:var(--muted);font-size:12px;text-transform:uppercase}
+/* tarjetas en celular */
+.cards{display:none}
+.eq{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+.eq h3{margin:0 0 4px;font-size:16px}
+.eq .meta{font-size:13px;color:var(--muted)}
+@media (max-width:760px){.table-wrap{display:none}.cards{display:block}}
+#map{height:calc(100vh - 230px);min-height:380px;border-radius:10px}
+#pickMap{height:260px;border-radius:8px;margin-top:10px;display:none}
+.hidden{display:none!important}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:8px;z-index:2000;opacity:0;transition:opacity .3s;pointer-events:none;max-width:90vw}
+.toast.show{opacity:1}
+.count{color:var(--muted);font-size:13px;margin-bottom:8px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:13px;margin-bottom:8px}
+.dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:4px;vertical-align:middle}
+</style>
+</head>
+<body>
+<header>
+  <h1>📏 Módulo de Metrología</h1>
+  <nav>
+    <button data-tab="form" class="active">➕ Registrar</button>
+    <button data-tab="list">📋 Equipos</button>
+    <button data-tab="mapa">🗺️ Mapa</button>
+    <button data-tab="datos">💾 Datos</button>
+  </nav>
+</header>
+
+<main>
+<!-- ============ FORMULARIO ============ -->
+<section id="tab-form">
+  <form id="f" class="card" autocomplete="off">
+    <h2 id="formTitle" style="margin-top:0;font-size:17px">Nuevo equipo</h2>
+    <input type="hidden" id="id">
+    <div class="grid">
+      <div><label for="tipo">Tipo de equipo *</label><input id="tipo" list="dl-tipo" required placeholder="Ej: Registrador de temperatura"></div>
+      <div><label for="nombre">Nombre del equipo *</label><input id="nombre" list="dl-nombre" required placeholder="Ej: Termógrafo"></div>
+      <div style="grid-column:1/-1"><label>Magnitud (puedes marcar varias)</label>
+        <input type="hidden" id="magnitud">
+        <div class="chips" id="magChips"></div>
+        <div class="row" style="margin-top:8px"><input id="magOtra" placeholder="Otra magnitud..."><button type="button" class="small" id="btnMagOtra">➕ Agregar</button></div></div>
+      <div><label for="marca">Marca</label><input id="marca" list="dl-marca"></div>
+      <div><label for="modelo">Modelo</label><input id="modelo"></div>
+      <div><label for="serie">Serie</label><input id="serie"></div>
+      <div><label for="estado">Estado *</label>
+        <select id="estado" required><option>Activo</option><option>Inactivo</option><option>Obsoleto</option></select></div>
+      <div><label for="codigo">Código del equipo *</label>
+        <div class="row"><input id="codigo" required><button type="button" class="small" id="btnCodigo" title="Volver a generar">↻</button></div>
+        <div class="hint">Se genera del nombre + correlativo (ej: eq-term-001). Puedes editarlo.</div></div>
+      <div><label for="ubicacion">Ubicación *</label>
+        <select id="ubicacion" required><option value="">— Selecciona —</option></select></div>
+      <div><label for="ubicEsp">Ubicación específica</label><input id="ubicEsp" list="dl-ubicEsp" placeholder="Ej: P1"></div>
+      <div><label for="punto">Punto de ubicación</label><input id="punto" list="dl-punto" placeholder="Ej: CF1"></div>
+      <div><label for="codUbic">Código de ubicación</label><input id="codUbic" readonly placeholder="P1 - CF1">
+        <div class="hint">Automático: ubicación específica - punto.</div></div>
+      <div><label for="responsable">Responsable</label><input id="responsable" list="dl-responsable"></div>
+    </div>
+
+    <div class="gps-box" style="margin-top:14px">
+      <label>Geolocalización</label>
+      <div class="grid">
+        <div><label for="lat">Latitud</label><input id="lat" inputmode="decimal" placeholder="-12.0464"></div>
+        <div><label for="lng">Longitud</label><input id="lng" inputmode="decimal" placeholder="-77.0428"></div>
+        <div><label for="prec">Precisión (m)</label><input id="prec" readonly></div>
+      </div>
+      <div class="actions">
+        <button type="button" class="primary" id="btnGPS">📍 Tomar ubicación GPS</button>
+        <button type="button" id="btnPick">🗺️ Elegir / ajustar en mapa</button>
+        <button type="button" id="btnClearGPS">Borrar coordenadas</button>
+      </div>
+      <div style="margin-top:12px">
+        <label for="pegar">Pegar coordenadas o enlace de Google Maps</label>
+        <div class="row"><input id="pegar" placeholder="-12.046400, -77.042800"><button type="button" class="small" id="btnPegar">📋 Usar</button></div>
+        <div class="hint">Si el GPS está bloqueado: en Google Maps mantén presionado tu punto azul, copia las coordenadas que aparecen arriba y pégalas aquí.</div>
+      </div>
+      <div class="hint" id="gpsMsg">En el celular activa la ubicación y párate junto al equipo. Se toman varias lecturas y se queda la más precisa.</div>
+      <div id="pickMap"></div>
+    </div>
+
+    <div class="actions">
+      <button type="submit" class="primary">💾 Guardar</button>
+      <button type="button" id="btnNuevo">Limpiar / nuevo</button>
+    </div>
+  </form>
+</section>
+
+<!-- ============ LISTA ============ -->
+<section id="tab-list" class="hidden">
+  <div class="card">
+    <div class="filters">
+      <input id="q" placeholder="Buscar código, nombre, serie, responsable...">
+      <select id="fUbic"><option value="">Todas las ubicaciones</option></select>
+      <select id="fMag"><option value="">Todas las magnitudes</option></select>
+      <select id="fEstado"><option value="">Todos los estados</option><option>Activo</option><option>Inactivo</option><option>Obsoleto</option></select>
+    </div>
+    <div class="count" id="count"></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Código</th><th>Nombre</th><th>Tipo</th><th>Magnitud</th><th>Marca / Modelo</th><th>Serie</th><th>Estado</th><th>Ubicación</th><th>Cód. ubicación</th><th>Responsable</th><th>GPS</th><th></th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table></div>
+    <div class="cards" id="cards"></div>
+  </div>
+</section>
+
+<!-- ============ MAPA ============ -->
+<section id="tab-mapa" class="hidden">
+  <div class="card">
+    <div class="filters">
+      <select id="mUbic"><option value="">Todas las ubicaciones</option></select>
+      <select id="mMag"><option value="">Todas las magnitudes</option></select>
+      <select id="mEstado"><option value="">Todos los estados</option><option>Activo</option><option>Inactivo</option><option>Obsoleto</option></select>
+      <select id="mCapa"><option value="osm">Mapa calles</option><option value="sat">Satélite</option></select>
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background:#2e7d32"></span>Activo</span>
+      <span><span class="dot" style="background:#ef8f00"></span>Inactivo</span>
+      <span><span class="dot" style="background:#6b7280"></span>Obsoleto</span>
+      <span id="mCount" style="color:var(--muted)"></span>
+    </div>
+    <div id="map"></div>
+  </div>
+</section>
+
+<!-- ============ DATOS ============ -->
+<section id="tab-datos" class="hidden">
+  <div class="card">
+    <h2 style="margin-top:0;font-size:17px">Respaldo y traspaso de datos</h2>
+    <p class="hint" style="font-size:14px">Los datos se guardan en este navegador. Para pasarlos del celular al ordenador (o al revés), exporta en JSON en un equipo e impórtalo en el otro. Haz respaldos seguido.</p>
+    <div class="actions">
+      <button class="primary" id="btnExpJSON">⬇️ Exportar JSON (respaldo)</button>
+      <button id="btnExpCSV">⬇️ Exportar CSV (Excel)</button>
+    </div>
+    <div style="margin-top:16px">
+      <label for="fileImp">Importar archivo JSON o CSV</label>
+      <input type="file" id="fileImp" accept=".json,.csv,application/json,text/csv">
+      <div class="actions">
+        <label style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="radio" name="modo" value="merge" checked style="width:auto"> Combinar (actualiza por código)</label>
+        <label style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="radio" name="modo" value="replace" style="width:auto"> Reemplazar todo</label>
+      </div>
+    </div>
+    <div class="actions" style="margin-top:24px">
+      <button class="danger" id="btnBorrarTodo">🗑️ Borrar todos los datos</button>
+    </div>
+  </div>
+</section>
+</main>
+
+<datalist id="dl-tipo"></datalist><datalist id="dl-nombre"></datalist><datalist id="dl-magnitud"></datalist>
+<datalist id="dl-marca"></datalist><datalist id="dl-responsable"></datalist><datalist id="dl-ubicEsp"></datalist><datalist id="dl-punto"></datalist>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+const UBICACIONES = ["MH1","MH2","CV","SJP","PROP","SB","LAB","MANT","RIEGO","S. BLANCO","S. VERDE","CF"];
+const KEY = "metrologia_equipos_v1";
+const CAMPOS = ["codigo","tipo","nombre","magnitud","marca","modelo","serie","estado","ubicacion","ubicEsp","punto","codUbic","responsable","lat","lng","prec","fechaGPS","creado","actualizado"];
+const COLORES = {Activo:"#2e7d32",Inactivo:"#ef8f00",Obsoleto:"#6b7280"};
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+let equipos = cargar();
+function cargar(){ try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch(e){ return []; } }
+function guardar(){ try { localStorage.setItem(KEY, JSON.stringify(equipos)); } catch(e){ toast("⚠️ No se pudo guardar en el navegador"); } }
+function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),2600); }
+
+/* ---------- selects de ubicación ---------- */
+for (const sel of ["#ubicacion","#fUbic","#mUbic"]) for (const u of UBICACIONES) $(sel).insertAdjacentHTML("beforeend", `<option>${u}</option>`);
+
+/* ---------- magnitudes (selección múltiple) ---------- */
+const MAGS_BASE = ["Temperatura","Humedad relativa","Presión","Masa","Volumen","pH","Conductividad","Longitud","Tiempo","Caudal"];
+const partirMag = v => String(v||"").split(/\s*[,;|]\s*/).map(x=>x.trim()).filter(Boolean);
+let magExtra = [];
+function todasMags(){
+  const set = [...MAGS_BASE];
+  for (const m of [...equipos.flatMap(e=>partirMag(e.magnitud)), ...magExtra]) if (!set.some(x=>x.toLowerCase()===m.toLowerCase())) set.push(m);
+  return set;
+}
+function renderChips(sel){
+  sel = sel || partirMag($("#magnitud").value);
+  for (const m of sel) if (!todasMags().some(x=>x.toLowerCase()===m.toLowerCase())) magExtra.push(m);
+  $("#magChips").innerHTML = todasMags().map(m => {
+    const on = sel.some(x=>x.toLowerCase()===m.toLowerCase());
+    return `<label class="chip${on?" on":""}"><input type="checkbox" value="${esc(m)}"${on?" checked":""}>${on?"✓ ":""}${esc(m)}</label>`;
+  }).join("");
+  $("#magnitud").value = sel.join(", ");
+}
+$("#magChips").addEventListener("change", () => {
+  renderChips([...$("#magChips").querySelectorAll("input:checked")].map(i=>i.value));
+});
+function agregarMagOtra(){
+  const v = $("#magOtra").value.trim(); if (!v) return;
+  const sel = partirMag($("#magnitud").value);
+  if (!sel.some(x=>x.toLowerCase()===v.toLowerCase())) sel.push(v);
+  $("#magOtra").value=""; renderChips(sel);
+}
+$("#btnMagOtra").onclick = agregarMagOtra;
+$("#magOtra").addEventListener("keydown", e => { if (e.key==="Enter"){ e.preventDefault(); agregarMagOtra(); } });
+function llenarFiltrosMag(){
+  for (const id of ["#fMag","#mMag"]) {
+    const v = $(id).value;
+    $(id).innerHTML = `<option value="">Todas las magnitudes</option>` + todasMags().map(m=>`<option>${esc(m)}</option>`).join("");
+    $(id).value = v;
+  }
+}
+
+/* ---------- pestañas ---------- */
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => irA(b.dataset.tab));
+function irA(tab){
+  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("active", x.dataset.tab===tab));
+  for (const t of ["form","list","mapa","datos"]) $("#tab-"+t).classList.toggle("hidden", t!==tab);
+  if (tab==="list") renderLista();
+  if (tab==="mapa") renderMapa();
+  window.scrollTo(0,0);
+}
+
+/* ---------- código de equipo ---------- */
+function abreviar(nombre){
+  const limpio = (nombre||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9 ]/g," ").trim();
+  const primera = limpio.split(/\s+/)[0] || "";
+  return primera.slice(0,4);
+}
+function generarCodigo(){
+  const ab = abreviar($("#nombre").value);
+  if (!ab) return "";
+  const pref = `eq-${ab}-`;
+  const idActual = $("#id").value;
+  let max = 0;
+  for (const e of equipos) {
+    if (e.id===idActual) continue;
+    const c = (e.codigo||"").toLowerCase();
+    if (c.startsWith(pref)) { const n = parseInt(c.slice(pref.length),10); if (n>max) max=n; }
+  }
+  return pref + String(max+1).padStart(3,"0");
+}
+let codigoManual = false;
+$("#codigo").addEventListener("input", () => codigoManual = true);
+$("#nombre").addEventListener("input", () => { if (!codigoManual) $("#codigo").value = generarCodigo(); });
+$("#btnCodigo").onclick = () => { codigoManual=false; $("#codigo").value = generarCodigo(); };
+
+/* ---------- código de ubicación ---------- */
+function actualizarCodUbic(){
+  const a=$("#ubicEsp").value.trim(), b=$("#punto").value.trim();
+  $("#codUbic").value = a && b ? `${a} - ${b}` : (a||b);
+}
+$("#ubicEsp").addEventListener("input", actualizarCodUbic);
+$("#punto").addEventListener("input", actualizarCodUbic);
+
+/* ---------- GPS ---------- */
+let watchId = null;
+$("#btnGPS").onclick = () => {
+  const msg = $("#gpsMsg");
+  if (!("geolocation" in navigator)) { msg.textContent = "Este navegador no permite geolocalización."; return; }
+  if (!window.isSecureContext) msg.textContent = "⚠️ El navegador puede bloquear el GPS si la página no se abre por https://. Intentando...";
+  else msg.textContent = "Buscando señal GPS... (hasta 20 s)";
+  if (watchId!==null) navigator.geolocation.clearWatch(watchId);
+  let mejor = null;
+  const fin = () => {
+    if (watchId!==null) { navigator.geolocation.clearWatch(watchId); watchId=null; }
+    if (mejor) msg.textContent = `✅ Ubicación tomada con precisión de ±${Math.round(mejor.coords.accuracy)} m.`;
+  };
+  const timer = setTimeout(fin, 20000);
+  watchId = navigator.geolocation.watchPosition(p => {
+    if (!mejor || p.coords.accuracy < mejor.coords.accuracy) {
+      mejor = p;
+      ponerCoords(p.coords.latitude, p.coords.longitude, p.coords.accuracy);
+      msg.textContent = `Mejorando precisión... ±${Math.round(p.coords.accuracy)} m`;
+    }
+    if (p.coords.accuracy <= 10) { clearTimeout(timer); fin(); }
+  }, err => {
+    clearTimeout(timer); fin();
+    const t = {1:"Permiso de ubicación denegado. Actívalo en la configuración del navegador.",2:"No se pudo obtener la posición (¿GPS apagado?).",3:"Se agotó el tiempo buscando señal."};
+    msg.textContent = "❌ " + ((err.code===1 && !window.isSecureContext)
+      ? "El navegador bloquea el GPS porque la página está abierta como archivo. Ábrela desde un enlace https:// (por ejemplo, subiéndola a Netlify Drop) o elige el punto en el mapa."
+      : (t[err.code] || err.message));
+  }, {enableHighAccuracy:true, maximumAge:0, timeout:20000});
+};
+function ponerCoords(lat,lng,prec){
+  $("#lat").value = (+lat).toFixed(6);
+  $("#lng").value = (+lng).toFixed(6);
+  $("#prec").value = prec!=null ? Math.round(prec) : "";
+  $("#lat").dataset.fecha = new Date().toISOString();
+  if (pickMarker) { pickMarker.setLatLng([lat,lng]); pickMap.setView([lat,lng], Math.max(pickMap.getZoom(),17)); }
+}
+function usarPegado(txt){
+  txt = decodeURIComponent(String(txt||""));
+  const m = txt.match(/@?(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/) || txt.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+  if (!m) { toast("No encontré coordenadas en el texto"); return; }
+  const lat=parseFloat(m[1]), lng=parseFloat(m[2]);
+  if (Math.abs(lat)>90 || Math.abs(lng)>180) { toast("Coordenadas fuera de rango"); return; }
+  ponerCoords(lat,lng,null); $("#prec").value="pegado"; $("#pegar").value="";
+  $("#gpsMsg").textContent = "✅ Coordenadas pegadas.";
+}
+$("#btnPegar").onclick = async () => {
+  let v = $("#pegar").value.trim();
+  if (!v && navigator.clipboard?.readText) { try { v = await navigator.clipboard.readText(); } catch(e){} }
+  usarPegado(v);
+};
+$("#btnClearGPS").onclick = () => { $("#lat").value=$("#lng").value=$("#prec").value=""; if (pickMarker){pickMap.removeLayer(pickMarker);pickMarker=null;} };
+
+/* mapa pequeño para elegir/ajustar punto */
+let pickMap=null, pickMarker=null;
+$("#btnPick").onclick = () => {
+  const el = $("#pickMap");
+  const visible = el.style.display==="block";
+  el.style.display = visible ? "none" : "block";
+  if (visible) return;
+  const lat=parseFloat($("#lat").value), lng=parseFloat($("#lng").value);
+  const centro = isFinite(lat)&&isFinite(lng) ? [lat,lng] : centroDatos();
+  if (!pickMap) {
+    pickMap = L.map("pickMap").setView(centro, isFinite(lat)?17:13);
+    capaBase().addTo(pickMap);
+    pickMap.on("click", e => colocarPick(e.latlng.lat, e.latlng.lng));
+  } else pickMap.setView(centro, isFinite(lat)?17:pickMap.getZoom());
+  if (isFinite(lat)&&isFinite(lng)) colocarPick(lat,lng,true);
+  setTimeout(()=>pickMap.invalidateSize(),50);
+  $("#gpsMsg").textContent = "Toca el mapa o arrastra el marcador para fijar el punto.";
+};
+function colocarPick(lat,lng,soloMarcador){
+  if (!pickMarker) {
+    pickMarker = L.marker([lat,lng],{draggable:true}).addTo(pickMap);
+    pickMarker.on("dragend", e => { const p=e.target.getLatLng(); $("#lat").value=p.lat.toFixed(6); $("#lng").value=p.lng.toFixed(6); $("#prec").value="manual"; });
+  } else pickMarker.setLatLng([lat,lng]);
+  if (!soloMarcador){ $("#lat").value=lat.toFixed(6); $("#lng").value=lng.toFixed(6); $("#prec").value="manual"; }
+}
+function centroDatos(){
+  const c = equipos.filter(e=>isFinite(parseFloat(e.lat)));
+  if (c.length) return [parseFloat(c[c.length-1].lat), parseFloat(c[c.length-1].lng)];
+  return [-12.0464,-77.0428];
+}
+
+/* ---------- guardar ---------- */
+$("#f").onsubmit = ev => {
+  ev.preventDefault();
+  actualizarCodUbic();
+  const id = $("#id").value || (Date.now().toString(36)+Math.random().toString(36).slice(2,6));
+  const codigo = $("#codigo").value.trim();
+  if (!codigo) { toast("Falta el código del equipo"); return; }
+  if (equipos.some(e => e.id!==id && (e.codigo||"").toLowerCase()===codigo.toLowerCase())) { toast("⚠️ Ya existe un equipo con el código "+codigo); $("#codigo").focus(); return; }
+  const lat=$("#lat").value.trim(), lng=$("#lng").value.trim();
+  if ((lat||lng) && !(isFinite(parseFloat(lat)) && isFinite(parseFloat(lng)))) { toast("Coordenadas no válidas"); return; }
+  const previo = equipos.find(e=>e.id===id);
+  const rec = {id};
+  for (const c of ["codigo","tipo","nombre","magnitud","marca","modelo","serie","estado","ubicacion","ubicEsp","punto","codUbic","responsable","lat","lng","prec"]) rec[c] = $("#"+c).value.trim();
+  rec.fechaGPS = lat ? ($("#lat").dataset.fecha || previo?.fechaGPS || "") : "";
+  rec.creado = previo?.creado || new Date().toISOString();
+  rec.actualizado = new Date().toISOString();
+  if (previo) Object.assign(previo, rec); else equipos.push(rec);
+  guardar(); actualizarDatalists();
+  toast(previo ? "✅ Equipo actualizado" : "✅ Equipo registrado: "+codigo);
+  limpiarForm();
+};
+$("#btnNuevo").onclick = limpiarForm;
+function limpiarForm(){
+  // conserva ubicación, ubicación específica y responsable para registrar varios equipos seguidos
+  const keep = {ubicacion:$("#ubicacion").value, ubicEsp:$("#ubicEsp").value, responsable:$("#responsable").value};
+  $("#f").reset(); $("#id").value=""; codigoManual=false; delete $("#lat").dataset.fecha;
+  if (!$("#formTitle").textContent.startsWith("Editar")) Object.entries(keep).forEach(([k,v])=>$("#"+k).value=v);
+  $("#formTitle").textContent="Nuevo equipo";
+  $("#codUbic").value=""; actualizarCodUbic(); renderChips([]);
+  if (pickMarker){pickMap.removeLayer(pickMarker);pickMarker=null;}
+  $("#gpsMsg").textContent="En el celular activa la ubicación y párate junto al equipo. Se toman varias lecturas y se queda la más precisa.";
+}
+function editar(id){
+  const e = equipos.find(x=>x.id===id); if (!e) return;
+  irA("form");
+  $("#formTitle").textContent = "Editar " + e.codigo;
+  $("#id").value = e.id;
+  for (const c of ["codigo","tipo","nombre","magnitud","marca","modelo","serie","estado","ubicacion","ubicEsp","punto","codUbic","responsable","lat","lng","prec"]) $("#"+c).value = e[c] ?? "";
+  codigoManual = true; renderChips(partirMag(e.magnitud));
+  if (pickMarker){pickMap.removeLayer(pickMarker);pickMarker=null;}
+}
+function eliminar(id){
+  const e = equipos.find(x=>x.id===id); if (!e) return;
+  if (!confirm(`¿Eliminar el equipo ${e.codigo}?`)) return;
+  equipos = equipos.filter(x=>x.id!==id); guardar(); renderLista(); toast("Equipo eliminado");
+}
+function verEnMapa(id){ irA("mapa"); const m = marcadores[id]; if (m){ mapa.setView(m.getLatLng(),18); m.openPopup(); } }
+
+/* ---------- lista ---------- */
+["#q","#fUbic","#fEstado","#fMag"].forEach(s=>$(s).addEventListener("input",renderLista));
+function filtrados(ubic,estado,q,mag){
+  q=(q||"").toLowerCase();
+  return equipos.filter(e => (!ubic||e.ubicacion===ubic) && (!estado||e.estado===estado) &&
+    (!mag || partirMag(e.magnitud).some(x=>x.toLowerCase()===mag.toLowerCase())) &&
+    (!q || CAMPOS.some(c=>String(e[c]||"").toLowerCase().includes(q))))
+    .sort((a,b)=>(a.codigo||"").localeCompare(b.codigo||"",undefined,{numeric:true}));
+}
+function renderLista(){
+  const lista = filtrados($("#fUbic").value,$("#fEstado").value,$("#q").value,$("#fMag").value);
+  $("#count").textContent = `${lista.length} de ${equipos.length} equipos`;
+  const gps = e => e.lat ? `<button class="small" onclick="verEnMapa('${e.id}')">📍 Ver</button>` : "—";
+  const acc = e => `<button class="small" onclick="editar('${e.id}')">✏️</button> <button class="small danger" onclick="eliminar('${e.id}')">🗑️</button>`;
+  $("#tbody").innerHTML = lista.map(e=>`<tr>
+    <td><b>${esc(e.codigo)}</b></td><td>${esc(e.nombre)}</td><td>${esc(e.tipo)}</td><td>${esc(e.magnitud)}</td>
+    <td>${esc([e.marca,e.modelo].filter(Boolean).join(" / "))}</td><td>${esc(e.serie)}</td>
+    <td><span class="badge b-${esc(e.estado)}">${esc(e.estado)}</span></td><td>${esc(e.ubicacion)}</td><td>${esc(e.codUbic)}</td>
+    <td>${esc(e.responsable)}</td><td>${gps(e)}</td><td>${acc(e)}</td></tr>`).join("") || `<tr><td colspan="12">Sin equipos.</td></tr>`;
+  $("#cards").innerHTML = lista.map(e=>`<div class="eq">
+    <div style="display:flex;justify-content:space-between;gap:8px"><h3>${esc(e.codigo)}</h3><span class="badge b-${esc(e.estado)}">${esc(e.estado)}</span></div>
+    <div><b>${esc(e.nombre)}</b> · ${esc(e.tipo)}</div>
+    <div class="meta">${esc([e.magnitud,[e.marca,e.modelo].filter(Boolean).join(" "),"Serie: "+(e.serie||"—")].filter(Boolean).join(" · "))}</div>
+    <div class="meta">📌 ${esc(e.ubicacion)} ${e.codUbic?"· "+esc(e.codUbic):""} · 👤 ${esc(e.responsable||"—")}</div>
+    <div class="actions" style="margin-top:8px">${gps(e)} ${acc(e)}</div></div>`).join("") || "<p>Sin equipos.</p>";
+}
+
+/* ---------- mapa ---------- */
+let mapa=null, capaActual=null, grupo=null, marcadores={};
+function capaBase(tipo){
+  return tipo==="sat"
+    ? L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:20,maxNativeZoom:19,attribution:"Imágenes © Esri"})
+    : L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:20,maxNativeZoom:19,attribution:"© OpenStreetMap"});
+}
+["#mUbic","#mEstado","#mMag"].forEach(s=>$(s).addEventListener("input",renderMapa));
+$("#mCapa").addEventListener("input",()=>{ if(!mapa)return; mapa.removeLayer(capaActual); capaActual=capaBase($("#mCapa").value).addTo(mapa); });
+function renderMapa(){
+  if (!mapa) {
+    mapa = L.map("map").setView(centroDatos(), 13);
+    capaActual = capaBase($("#mCapa").value).addTo(mapa);
+    grupo = L.featureGroup().addTo(mapa);
+  }
+  setTimeout(()=>mapa.invalidateSize(),50);
+  grupo.clearLayers(); marcadores={};
+  const lista = filtrados($("#mUbic").value,$("#mEstado").value,"",$("#mMag").value).filter(e=>isFinite(parseFloat(e.lat))&&isFinite(parseFloat(e.lng)));
+  for (const e of lista) {
+    const m = L.circleMarker([+e.lat,+e.lng],{radius:9,color:"#fff",weight:2,fillColor:COLORES[e.estado]||"#0b6bcb",fillOpacity:.95});
+    m.bindPopup(`<b>${esc(e.codigo)}</b><br>${esc(e.nombre)} · ${esc(e.tipo)}<br>${esc(e.magnitud)} · ${esc(e.marca)} ${esc(e.modelo)}<br>
+      Serie: ${esc(e.serie||"—")}<br>Estado: ${esc(e.estado)}<br>Ubicación: ${esc(e.ubicacion)} ${e.codUbic?"("+esc(e.codUbic)+")":""}<br>
+      Responsable: ${esc(e.responsable||"—")}<br><small>${(+e.lat).toFixed(6)}, ${(+e.lng).toFixed(6)} ${e.prec?"· ±"+esc(e.prec)+(e.prec==="manual"?"":" m"):""}</small><br>
+      <a href="https://www.google.com/maps?q=${+e.lat},${+e.lng}" target="_blank" rel="noopener">Abrir en Google Maps</a> ·
+      <a href="#" onclick="editar('${e.id}');return false">Editar</a>`);
+    m.bindTooltip(esc(e.codigo));
+    m.addTo(grupo); marcadores[e.id]=m;
+  }
+  const sinGps = filtrados($("#mUbic").value,$("#mEstado").value,"",$("#mMag").value).length - lista.length;
+  $("#mCount").textContent = `${lista.length} puntos en el mapa` + (sinGps?` · ${sinGps} sin coordenadas`:"");
+  if (lista.length) mapa.fitBounds(grupo.getBounds(),{padding:[30,30],maxZoom:18});
+}
+
+/* ---------- datalists (autocompletar) ---------- */
+function actualizarDatalists(){
+  llenarFiltrosMag();
+  for (const c of ["tipo","nombre","magnitud","marca","responsable","ubicEsp","punto"]) {
+    const vals = [...new Set(equipos.map(e=>e[c]).filter(Boolean))].sort();
+    if (c==="magnitud") for (const v of ["Temperatura","Humedad relativa","Presión","Masa","Volumen","pH","Conductividad","Longitud","Tiempo","Caudal"]) if(!vals.includes(v)) vals.push(v);
+    $("#dl-"+c).innerHTML = vals.map(v=>`<option value="${esc(v)}">`).join("");
+  }
+}
+
+/* ---------- exportar / importar ---------- */
+function descargar(nombre, contenido, tipo){
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([contenido],{type:tipo})); a.download=nombre;
+  document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);
+}
+const hoy = () => new Date().toISOString().slice(0,10);
+$("#btnExpJSON").onclick = () => descargar(`metrologia-${hoy()}.json`, JSON.stringify(equipos,null,2), "application/json");
+const ENCAB = {codigo:"Código equipo",tipo:"Tipo de equipo",nombre:"Nombre del equipo",magnitud:"Magnitud",marca:"Marca",modelo:"Modelo",serie:"Serie",estado:"Estado",ubicacion:"Ubicación",ubicEsp:"Ubicación específica",punto:"Punto de ubicación",codUbic:"Código de ubicación",responsable:"Responsable",lat:"Latitud",lng:"Longitud",prec:"Precisión (m)",fechaGPS:"Fecha GPS",creado:"Creado",actualizado:"Actualizado"};
+$("#btnExpCSV").onclick = () => {
+  const q = v => `"${String(v??"").replace(/"/g,'""')}"`;
+  const filas = [CAMPOS.map(c=>q(ENCAB[c])).join(";"), ...equipos.map(e=>CAMPOS.map(c=>q(e[c])).join(";"))];
+  descargar(`metrologia-${hoy()}.csv`, "﻿"+filas.join("\r\n"), "text/csv;charset=utf-8");
+};
+function parseCSV(txt){
+  txt = txt.replace(/^﻿/,"");
+  const sep = (txt.split("\n")[0].match(/;/g)||[]).length >= (txt.split("\n")[0].match(/,/g)||[]).length ? ";" : ",";
+  const rows=[]; let row=[], f="", inq=false;
+  for (let i=0;i<txt.length;i++){
+    const ch=txt[i];
+    if (inq){ if(ch==='"'){ if(txt[i+1]==='"'){f+='"';i++;} else inq=false; } else f+=ch; }
+    else if (ch==='"') inq=true;
+    else if (ch===sep){ row.push(f); f=""; }
+    else if (ch==="\n"){ row.push(f.replace(/\r$/,"")); rows.push(row); row=[]; f=""; }
+    else f+=ch;
+  }
+  if (f||row.length){ row.push(f); rows.push(row); }
+  const head = rows.shift().map(h=>h.trim());
+  const inv = Object.fromEntries(Object.entries(ENCAB).map(([k,v])=>[v.toLowerCase(),k]));
+  const keys = head.map(h => inv[h.toLowerCase()] || (CAMPOS.includes(h)?h:null));
+  return rows.filter(r=>r.some(x=>x.trim())).map(r=>{ const o={}; keys.forEach((k,i)=>{ if(k) o[k]=(r[i]||"").trim(); }); return o; });
+}
+$("#fileImp").onchange = async ev => {
+  const file = ev.target.files[0]; if (!file) return;
+  try {
+    const txt = await file.text();
+    let datos = file.name.toLowerCase().endsWith(".json") ? JSON.parse(txt) : parseCSV(txt);
+    if (!Array.isArray(datos)) throw new Error("formato no válido");
+    datos = datos.filter(d=>d && d.codigo).map(d=>({...d, id: d.id || (Date.now().toString(36)+Math.random().toString(36).slice(2,8))}));
+    const modo = document.querySelector('input[name=modo]:checked').value;
+    if (modo==="replace") {
+      if (!confirm(`Se reemplazarán ${equipos.length} equipos por ${datos.length}. ¿Continuar?`)) return;
+      equipos = datos;
+    } else {
+      let nuevos=0, act=0;
+      for (const d of datos) {
+        const ex = equipos.find(e=>(e.codigo||"").toLowerCase()===d.codigo.toLowerCase());
+        if (ex) { Object.assign(ex, d, {id:ex.id}); act++; } else { equipos.push(d); nuevos++; }
+      }
+      toast(`Importados: ${nuevos} nuevos, ${act} actualizados`);
+    }
+    guardar(); actualizarDatalists();
+    if (modo==="replace") toast(`Importados ${datos.length} equipos`);
+  } catch(e){ toast("❌ No se pudo leer el archivo: "+e.message); }
+  ev.target.value="";
+};
+$("#btnBorrarTodo").onclick = () => {
+  if (!equipos.length) return toast("No hay datos");
+  if (!confirm(`¿Borrar los ${equipos.length} equipos de este navegador? Exporta un respaldo antes.`)) return;
+  if (prompt('Escribe BORRAR para confirmar')!=="BORRAR") return;
+  equipos=[]; guardar(); toast("Datos borrados");
+};
+
+actualizarDatalists(); renderChips([]);
+</script>
+</body>
+</html>
