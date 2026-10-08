@@ -581,7 +581,11 @@ function filasAObjetos(rows){
 /* Excel en español suele leer "-2.860619" como -2860619: se recupera el decimal */
 function arreglarCoord(v, max){
   if (v==null || String(v).trim()==="") return "";
-  let n = parseFloat(String(v).trim().replace(",", "."));
+  let t = String(v).trim().replace(/\s/g,"");
+  // "-2.860.619" o "-2,860,619" (Excel agregó separadores de miles): se quitan y se recupera el decimal
+  if ((t.match(/[.,]/g)||[]).length > 1) t = t.replace(/[.,]/g,"");
+  else t = t.replace(",", ".");
+  let n = Number(t);
   if (!isFinite(n)) return "";
   if (Math.abs(n) > max && Number.isInteger(n)) n = n / 1e6;
   return Math.abs(n) <= max ? n.toFixed(6) : "";
