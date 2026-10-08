@@ -95,7 +95,7 @@ th{color:var(--muted);font-size:12px;text-transform:uppercase}
         <select id="estado" required><option>Activo</option><option>Inactivo</option><option>Obsoleto</option></select></div>
       <div><label for="codigo">Código del equipo *</label>
         <div class="row"><input id="codigo" required><button type="button" class="small" id="btnCodigo" title="Volver a generar">↻</button></div>
-        <div class="hint">Se genera del nombre + correlativo (ej: eq-term-001). Puedes editarlo.</div></div>
+        <div class="hint">Se genera del tipo de equipo + correlativo (ej: EQ-TERM-001). Puedes editarlo.</div></div>
       <div><label for="ubicacion">Ubicación *</label>
         <select id="ubicacion" required><option value="">— Selecciona —</option></select></div>
       <div><label for="ubicEsp">Ubicación específica</label><input id="ubicEsp" list="dl-ubicEsp" placeholder="Ej: P1"></div>
@@ -269,7 +269,7 @@ function abreviar(nombre){
   return primera.slice(0,4);
 }
 function generarCodigo(){
-  const ab = abreviar($("#nombre").value);
+  const ab = abreviar($("#tipo").value || $("#nombre").value);
   if (!ab) return "";
   const pref = `eq-${ab}-`;
   const idActual = $("#id").value;
@@ -279,11 +279,11 @@ function generarCodigo(){
     const c = (e.codigo||"").toLowerCase();
     if (c.startsWith(pref)) { const n = parseInt(c.slice(pref.length),10); if (n>max) max=n; }
   }
-  return pref + String(max+1).padStart(3,"0");
+  return (pref + String(max+1).padStart(3,"0")).toUpperCase();
 }
 let codigoManual = false;
 $("#codigo").addEventListener("input", () => codigoManual = true);
-$("#nombre").addEventListener("input", () => { if (!codigoManual) $("#codigo").value = generarCodigo(); });
+for (const id of ["#tipo","#nombre"]) $(id).addEventListener("input", () => { if (!codigoManual) $("#codigo").value = generarCodigo(); });
 $("#btnCodigo").onclick = () => { codigoManual=false; $("#codigo").value = generarCodigo(); };
 
 /* ---------- código de ubicación ---------- */
