@@ -177,6 +177,12 @@ th{color:var(--muted);font-size:12px;text-transform:uppercase}
       <select id="mEstado"><option value="">Todos los estados</option><option>Activo</option><option>Inactivo</option><option>Obsoleto</option></select>
       <select id="mCapa"><option value="osm">Mapa calles</option><option value="sat">Satélite</option></select>
     </div>
+    <div class="filters">
+      <select id="mArea"><option value="">Todas las áreas</option></select>
+      <select id="mMarca"><option value="">Todas las marcas</option></select>
+      <select id="mModelo"><option value="">Todos los modelos</option></select>
+      <button type="button" id="mLimpiar">✖ Limpiar filtros</button>
+    </div>
     <div class="legend">
       <span><span class="dot" style="background:#2e7d32"></span>Activo</span>
       <span><span class="dot" style="background:#ef8f00"></span>Inactivo</span>
@@ -504,7 +510,23 @@ function capaBase(tipo){
     ? L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:20,maxNativeZoom:19,attribution:"Imágenes © Esri"})
     : L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:20,maxNativeZoom:19,attribution:"© OpenStreetMap"});
 }
-["#mUbic","#mEstado","#mMag"].forEach(s=>$(s).addEventListener("input",renderMapa));
+["#mUbic","#mEstado","#mMag","#mArea","#mMarca","#mModelo"].forEach(s=>$(s).addEventListener("input",renderMapa));
+/* área = ubicación específica; marca y modelo. Las opciones se ajustan a los demás filtros elegidos */
+function llenarFiltrosMapa(){
+  const base = filtrados($("#mUbic").value,$("#mEstado").value,"",$("#mMag").value);
+  const opts = (id, campo, todos, extra) => {
+    const sel = $(id), v = sel.value;
+    const vals = [...new Set(base.filter(extra).map(e=>(e[campo]||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+    sel.innerHTML = `<option value="">${todos}</option>` + vals.map(x=>`<option>${esc(x)}</option>`).join("");
+    sel.value = vals.includes(v) ? v : "";
+  };
+  const m = e => !$("#mMarca").value || e.marca===$("#mMarca").value;
+  opts("#mArea","ubicEsp","Todas las áreas", e => m(e) && (!$("#mModelo").value || e.modelo===$("#mModelo").value));
+  opts("#mMarca","marca","Todas las marcas", e => !$("#mArea").value || e.ubicEsp===$("#mArea").value);
+  opts("#mModelo","modelo","Todos los modelos", e => m(e) && (!$("#mArea").value || e.ubicEsp===$("#mArea").value));
+}
+const pasaMapa = e => (!$("#mArea").value || e.ubicEsp===$("#mArea").value) && (!$("#mMarca").value || e.marca===$("#mMarca").value) && (!$("#mModelo").value || e.modelo===$("#mModelo").value);
+$("#mLimpiar").onclick = () => { ["#mUbic","#mEstado","#mMag","#mArea","#mMarca","#mModelo"].forEach(s=>$(s).value=""); renderMapa(); };
 $("#mCapa").addEventListener("input",()=>{ if(!mapa)return; mapa.removeLayer(capaActual); capaActual=capaBase($("#mCapa").value).addTo(mapa); });
 function renderMapa(){
   if (!mapa) {
@@ -514,7 +536,8 @@ function renderMapa(){
   }
   setTimeout(()=>mapa.invalidateSize(),50);
   grupo.clearLayers(); marcadores={};
-  const lista = filtrados($("#mUbic").value,$("#mEstado").value,"",$("#mMag").value).filter(e=>isFinite(parseFloat(e.lat))&&isFinite(parseFloat(e.lng)));
+  llenarFiltrosMapa();
+  const lista = filtrados($("#mUbic").value,$("#mEstado").value,"",$("#mMag").value).filter(pasaMapa).filter(e=>isFinite(parseFloat(e.lat))&&isFinite(parseFloat(e.lng)));
   for (const e of lista) {
     const m = L.circleMarker([+e.lat,+e.lng],{radius:9,color:"#fff",weight:2,fillColor:COLORES[e.estado]||"#0b6bcb",fillOpacity:.95});
     m.bindPopup(`<b>${esc(e.codigo)}</b><br>${esc(e.nombre)} · ${esc(e.tipo)}<br>${esc(e.magnitud)} · ${esc(e.marca)} ${esc(e.modelo)}<br>
@@ -525,7 +548,7 @@ function renderMapa(){
     m.bindTooltip(esc(e.codigo));
     m.addTo(grupo); marcadores[e.id]=m;
   }
-  const sinGps = filtrados($("#mUbic").value,$("#mEstado").value,"",$("#mMag").value).length - lista.length;
+  const sinGps = filtrados($("#mUbic").value,$("#mEstado").value,"",$("#mMag").value).filter(pasaMapa).length - lista.length;
   $("#mCount").textContent = `${lista.length} puntos en el mapa` + (sinGps?` · ${sinGps} sin coordenadas`:"");
   if (lista.length) mapa.fitBounds(grupo.getBounds(),{padding:[30,30],maxZoom:18});
 }
