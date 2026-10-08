@@ -21,7 +21,7 @@ header{position:sticky;top:0;z-index:1000;background:var(--card);border-bottom:1
 header h1{margin:0 0 8px;font-size:18px}
 nav{display:flex;gap:6px;flex-wrap:wrap}
 nav button{flex:1;min-width:70px;padding:10px 6px}
-main{max-width:1100px;margin:0 auto;padding:16px}
+main{max-width:1600px;margin:0 auto;padding:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
 label{display:block;font-size:13px;color:var(--muted);margin-bottom:4px;font-weight:600}
@@ -48,6 +48,9 @@ button.small{padding:6px 10px;font-size:13px}
 table{width:100%;border-collapse:collapse;font-size:14px}
 th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
 th{color:var(--muted);font-size:12px;text-transform:uppercase}
+.colf th{padding:4px;text-transform:none}
+.colf input,.colf select{padding:6px;font-size:13px;min-width:90px}
+.colf .activo{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary)}
 /* tarjetas en celular */
 .cards{display:none}
 .eq{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
@@ -144,7 +147,21 @@ th{color:var(--muted);font-size:12px;text-transform:uppercase}
     </div>
     <div class="count" id="count"></div>
     <div class="table-wrap"><table>
-      <thead><tr><th>Código</th><th>Nombre</th><th>Tipo</th><th>Magnitud</th><th>Marca / Modelo</th><th>Serie</th><th>Estado</th><th>Ubicación</th><th>Cód. ubicación</th><th>Responsable</th><th>GPS</th><th></th></tr></thead>
+      <thead><tr><th>Código</th><th>Nombre</th><th>Tipo</th><th>Magnitud</th><th>Marca / Modelo</th><th>Serie</th><th>Estado</th><th>Ubicación</th><th>Cód. ubicación</th><th>Responsable</th><th>GPS</th><th></th></tr>
+      <tr class="colf">
+        <th><input data-cf="codigo" placeholder="Buscar"></th>
+        <th><select data-cf="nombre"></select></th>
+        <th><select data-cf="tipo"></select></th>
+        <th><select data-cf="magnitud"></select></th>
+        <th><input data-cf="marcaModelo" placeholder="Buscar"></th>
+        <th><input data-cf="serie" placeholder="Buscar"></th>
+        <th><select data-cf="estado"></select></th>
+        <th><select data-cf="ubicacion"></select></th>
+        <th><select data-cf="codUbic"></select></th>
+        <th><select data-cf="responsable"></select></th>
+        <th><select data-cf="gps"><option value="">Todos</option><option value="si">Con GPS</option><option value="no">Sin GPS</option></select></th>
+        <th><button type="button" class="small" id="btnLimpiarCF" title="Quitar filtros">✖ Limpiar</button></th>
+      </tr></thead>
       <tbody id="tbody"></tbody>
     </table></div>
     <div class="cards" id="cards"></div>
@@ -257,7 +274,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => irA(b.dat
 function irA(tab){
   document.querySelectorAll("nav button").forEach(x => x.classList.toggle("active", x.dataset.tab===tab));
   for (const t of ["form","list","mapa","datos"]) $("#tab-"+t).classList.toggle("hidden", t!==tab);
-  if (tab==="list") renderLista();
+  if (tab==="list") { llenarFiltrosColumna(); renderLista(); }
   if (tab==="mapa") renderMapa();
   window.scrollTo(0,0);
 }
@@ -434,8 +451,35 @@ function filtrados(ubic,estado,q,mag){
     (!q || CAMPOS.some(c=>String(e[c]||"").toLowerCase().includes(q))))
     .sort((a,b)=>(a.codigo||"").localeCompare(b.codigo||"",undefined,{numeric:true}));
 }
+/* filtros por columna (tabla en ordenador) */
+const colVal = (e,k) => k==="marcaModelo" ? [e.marca,e.modelo].filter(Boolean).join(" / ") : (e[k]||"");
+function llenarFiltrosColumna(){
+  document.querySelectorAll(".colf select[data-cf]").forEach(sel => {
+    const k = sel.dataset.cf; if (k==="gps") return;
+    const vals = k==="magnitud" ? todasMags().filter(m=>equipos.some(e=>partirMag(e.magnitud).includes(m)))
+      : [...new Set(equipos.map(e=>colVal(e,k)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+    const v = sel.value;
+    sel.innerHTML = `<option value="">Todos</option>` + vals.map(x=>`<option>${esc(x)}</option>`).join("");
+    sel.value = vals.includes(v) ? v : "";
+  });
+}
+function pasaFiltrosColumna(e){
+  for (const el of document.querySelectorAll(".colf [data-cf]")) {
+    const k = el.dataset.cf, v = el.value.trim();
+    el.classList.toggle("activo", !!v);
+    if (!v) continue;
+    if (k==="gps") { if ((v==="si") !== !!e.lat) return false; continue; }
+    if (k==="magnitud") { if (!partirMag(e.magnitud).includes(v)) return false; continue; }
+    if (el.tagName==="SELECT") { if (colVal(e,k)!==v) return false; }
+    else if (!colVal(e,k).toLowerCase().includes(v.toLowerCase())) return false;
+  }
+  return true;
+}
+document.querySelectorAll(".colf [data-cf]").forEach(el=>el.addEventListener("input",renderLista));
+$("#btnLimpiarCF").onclick = () => { document.querySelectorAll(".colf [data-cf]").forEach(el=>el.value=""); ["#q","#fUbic","#fEstado","#fMag"].forEach(s=>$(s).value=""); renderLista(); };
 function renderLista(){
-  const lista = filtrados($("#fUbic").value,$("#fEstado").value,$("#q").value,$("#fMag").value);
+  if (!renderLista._lleno) { llenarFiltrosColumna(); renderLista._lleno = true; }
+  const lista = filtrados($("#fUbic").value,$("#fEstado").value,$("#q").value,$("#fMag").value).filter(pasaFiltrosColumna);
   $("#count").textContent = `${lista.length} de ${equipos.length} equipos`;
   const gps = e => e.lat ? `<button class="small" onclick="verEnMapa('${e.id}')">📍 Ver</button>` : "—";
   const acc = e => `<button class="small" onclick="editar('${e.id}')">✏️</button> <button class="small danger" onclick="eliminar('${e.id}')">🗑️</button>`;
