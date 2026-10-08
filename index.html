@@ -82,8 +82,8 @@ th{color:var(--muted);font-size:12px;text-transform:uppercase}
     <h2 id="formTitle" style="margin-top:0;font-size:17px">Nuevo equipo</h2>
     <input type="hidden" id="id">
     <div class="grid">
-      <div><label for="tipo">Tipo de equipo *</label><input id="tipo" list="dl-tipo" required placeholder="Ej: Registrador de temperatura"></div>
-      <div><label for="nombre">Nombre del equipo *</label><input id="nombre" list="dl-nombre" required placeholder="Ej: Termógrafo"></div>
+      <div><label for="tipo">Tipo de equipo *</label><input id="tipo" list="dl-tipo" required placeholder="Ej: Termógrafo"></div>
+      <div><label for="nombre">Nombre del equipo *</label><input id="nombre" list="dl-nombre" required placeholder="Ej: Data Logger"></div>
       <div style="grid-column:1/-1"><label>Magnitud (puedes marcar varias)</label>
         <input type="hidden" id="magnitud">
         <div class="chips" id="magChips"></div>
@@ -490,6 +490,8 @@ function actualizarDatalists(){
   llenarFiltrosMag();
   for (const c of ["tipo","nombre","magnitud","marca","responsable","ubicEsp","punto"]) {
     const vals = [...new Set(equipos.map(e=>e[c]).filter(Boolean))].sort();
+    if (c==="tipo" && !vals.includes("Termógrafo")) vals.unshift("Termógrafo");
+    if (c==="nombre" && !vals.includes("Data Logger")) vals.unshift("Data Logger");
     if (c==="magnitud") for (const v of ["Temperatura","Humedad relativa","Presión","Masa","Volumen","pH","Conductividad","Longitud","Tiempo","Caudal"]) if(!vals.includes(v)) vals.push(v);
     $("#dl-"+c).innerHTML = vals.map(v=>`<option value="${esc(v)}">`).join("");
   }
