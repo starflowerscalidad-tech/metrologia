@@ -194,11 +194,12 @@ th{color:var(--muted);font-size:12px;text-transform:uppercase}
     <p class="hint" style="font-size:14px">Los datos se guardan en este navegador. Para pasarlos del celular al ordenador (o al revés), exporta en JSON en un equipo e impórtalo en el otro. Haz respaldos seguido.</p>
     <div class="actions">
       <button class="primary" id="btnExpJSON">⬇️ Exportar JSON (respaldo)</button>
-      <button id="btnExpCSV">⬇️ Exportar CSV (Excel)</button>
+      <button id="btnExpXLSX">⬇️ Exportar Excel (.xlsx)</button>
+      <button id="btnExpCSV">⬇️ Exportar CSV</button>
     </div>
     <div style="margin-top:16px">
-      <label for="fileImp">Importar archivo JSON o CSV</label>
-      <input type="file" id="fileImp" accept=".json,.csv,application/json,text/csv">
+      <label for="fileImp">Importar archivo Excel (.xlsx), JSON o CSV</label>
+      <input type="file" id="fileImp" accept=".xlsx,.xls,.json,.csv,application/json,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
       <div class="actions">
         <label style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="radio" name="modo" value="merge" checked style="width:auto"> Combinar (actualiza por código)</label>
         <label style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="radio" name="modo" value="replace" style="width:auto"> Reemplazar todo</label>
@@ -567,17 +568,61 @@ function parseCSV(txt){
     else f+=ch;
   }
   if (f||row.length){ row.push(f); rows.push(row); }
-  const head = rows.shift().map(h=>h.trim());
-  const inv = Object.fromEntries(Object.entries(ENCAB).map(([k,v])=>[v.toLowerCase(),k]));
-  const keys = head.map(h => inv[h.toLowerCase()] || (CAMPOS.includes(h)?h:null));
+  return filasAObjetos(rows);
+}
+function filasAObjetos(rows){
+  rows = rows.map(r => r.map(x => x==null ? "" : String(x)));
+  const head = (rows.shift()||[]).map(h=>h.trim());
+  const sinTilde = t => t.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+  const inv = Object.fromEntries(Object.entries(ENCAB).map(([k,v])=>[sinTilde(v),k]));
+  const keys = head.map(h => inv[sinTilde(h)] || (CAMPOS.includes(h)?h:null));
   return rows.filter(r=>r.some(x=>x.trim())).map(r=>{ const o={}; keys.forEach((k,i)=>{ if(k) o[k]=(r[i]||"").trim(); }); return o; });
 }
+/* Excel en español suele leer "-2.860619" como -2860619: se recupera el decimal */
+function arreglarCoord(v, max){
+  if (v==null || String(v).trim()==="") return "";
+  let n = parseFloat(String(v).trim().replace(",", "."));
+  if (!isFinite(n)) return "";
+  if (Math.abs(n) > max && Number.isInteger(n)) n = n / 1e6;
+  return Math.abs(n) <= max ? n.toFixed(6) : "";
+}
+let xlsxLib = null;
+function cargarXLSX(){
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  return xlsxLib ||= new Promise((ok, fail) => {
+    const sc = document.createElement("script");
+    sc.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    sc.onload = () => ok(window.XLSX);
+    sc.onerror = () => { xlsxLib = null; fail(new Error("no se pudo cargar el lector de Excel (¿sin internet?)")); };
+    document.head.appendChild(sc);
+  });
+}
+$("#btnExpXLSX").onclick = async () => {
+  try {
+    const X = await cargarXLSX();
+    const filas = [CAMPOS.map(c=>ENCAB[c]), ...equipos.map(e=>CAMPOS.map(c => (c==="lat"||c==="lng") && e[c]!=="" && e[c]!=null ? Number(e[c]) : (e[c] ?? "")))];
+    const ws = X.utils.aoa_to_sheet(filas);
+    ws["!cols"] = CAMPOS.map(c=>({wch: Math.max(12, ENCAB[c].length+2)}));
+    const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, "Equipos");
+    X.writeFile(wb, `metrologia-${hoy()}.xlsx`);
+  } catch(e){ toast("❌ "+e.message); }
+};
 $("#fileImp").onchange = async ev => {
   const file = ev.target.files[0]; if (!file) return;
   try {
-    const txt = await file.text();
-    let datos = file.name.toLowerCase().endsWith(".json") ? JSON.parse(txt) : parseCSV(txt);
+    const nombre = file.name.toLowerCase();
+    let datos;
+    if (/\.xlsx?$/.test(nombre)) {
+      const X = await cargarXLSX();
+      const wb = X.read(await file.arrayBuffer(), {type:"array"});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      datos = filasAObjetos(X.utils.sheet_to_json(ws, {header:1, raw:true, defval:""}));
+    } else {
+      const txt = await file.text();
+      datos = nombre.endsWith(".json") ? JSON.parse(txt) : parseCSV(txt);
+    }
     if (!Array.isArray(datos)) throw new Error("formato no válido");
+    datos.forEach(d => { if (d) { d.lat = arreglarCoord(d.lat, 90); d.lng = arreglarCoord(d.lng, 180); if (!d.lat || !d.lng) d.lat = d.lng = ""; } });
     datos = datos.filter(d=>d && d.codigo).map(d=>({...d, id: d.id || (Date.now().toString(36)+Math.random().toString(36).slice(2,8))}));
     const modo = document.querySelector('input[name=modo]:checked').value;
     if (modo==="replace") {
