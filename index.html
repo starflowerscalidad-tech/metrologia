@@ -37,7 +37,7 @@ button.small{padding:6px 10px;font-size:13px}
 .hint{font-size:12px;color:var(--muted);margin-top:4px}
 .gps-box{border:1px dashed var(--line);border-radius:8px;padding:12px}
 .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;color:#fff}
-.b-Activo{background:var(--ok)}.b-Inactivo{background:var(--warn)}.b-Obsoleto{background:var(--grey)}
+.b-patron{background:#6a3fb5}.b-Activo{background:var(--ok)}.b-Inactivo{background:var(--warn)}.b-Obsoleto{background:var(--grey)}
 .filters{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;margin-bottom:12px}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid var(--line);border-radius:999px;cursor:pointer;font-size:14px;color:var(--text);font-weight:400;margin:0;user-select:none}
@@ -96,6 +96,8 @@ th{color:var(--muted);font-size:12px;text-transform:uppercase}
       <div><label for="serie">Serie</label><input id="serie"></div>
       <div><label for="estado">Estado *</label>
         <select id="estado" required><option>Activo</option><option>Inactivo</option><option>Obsoleto</option></select></div>
+      <div><label for="patron">¿Es equipo patrón?</label>
+        <select id="patron"><option value="No">No</option><option value="Sí">Sí (código PT-)</option></select></div>
       <div><label for="codigo">Código del equipo *</label>
         <div class="row"><input id="codigo" required><button type="button" class="small" id="btnCodigo" title="Volver a generar">↻</button></div>
         <div class="hint">Se genera del tipo de equipo + correlativo (ej: EQ-TERM-001). Puedes editarlo.</div></div>
@@ -226,7 +228,7 @@ th{color:var(--muted);font-size:12px;text-transform:uppercase}
 <script>
 const UBICACIONES = ["MH1","MH2","CV","SJP","PROP","SB","LAB","MANT","RIEGO","S. BLANCO","S. VERDE","CF","METEOROLOGÍA"];
 const KEY = "metrologia_equipos_v1";
-const CAMPOS = ["codigo","tipo","nombre","magnitud","marca","modelo","serie","estado","ubicacion","ubicEsp","punto","codUbic","responsable","lat","lng","prec","fechaGPS","creado","actualizado"];
+const CAMPOS = ["codigo","patron","tipo","nombre","magnitud","marca","modelo","serie","estado","ubicacion","ubicEsp","punto","codUbic","responsable","lat","lng","prec","fechaGPS","creado","actualizado"];
 const COLORES = {Activo:"#2e7d32",Inactivo:"#ef8f00",Obsoleto:"#6b7280"};
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -295,7 +297,7 @@ function abreviar(nombre){
 function generarCodigo(){
   const ab = abreviar($("#tipo").value || $("#nombre").value);
   if (!ab) return "";
-  const pref = `eq-${ab}-`;
+  const pref = `${$("#patron").value==="Sí" ? "pt" : "eq"}-${ab}-`;
   const idActual = $("#id").value;
   let max = 0;
   for (const e of equipos) {
@@ -309,6 +311,9 @@ let codigoManual = false;
 $("#codigo").addEventListener("input", () => codigoManual = true);
 for (const id of ["#tipo","#nombre"]) $(id).addEventListener("input", () => { if (!codigoManual) $("#codigo").value = generarCodigo(); });
 $("#btnCodigo").onclick = () => { codigoManual=false; $("#codigo").value = generarCodigo(); };
+
+const esPatron = e => /^s[ií]$/i.test(String(e.patron||"").trim()) || /^pt-/i.test(e.codigo||"");
+$("#patron").addEventListener("input", () => { codigoManual=false; $("#codigo").value = generarCodigo(); });
 
 /* ---------- código de ubicación ---------- */
 function actualizarCodUbic(){
@@ -413,7 +418,7 @@ $("#f").onsubmit = ev => {
   if ((lat||lng) && !(isFinite(parseFloat(lat)) && isFinite(parseFloat(lng)))) { toast("Coordenadas no válidas"); return; }
   const previo = equipos.find(e=>e.id===id);
   const rec = {id};
-  for (const c of ["codigo","tipo","nombre","magnitud","marca","modelo","serie","estado","ubicacion","ubicEsp","punto","codUbic","responsable","lat","lng","prec"]) rec[c] = $("#"+c).value.trim();
+  for (const c of ["codigo","patron","tipo","nombre","magnitud","marca","modelo","serie","estado","ubicacion","ubicEsp","punto","codUbic","responsable","lat","lng","prec"]) rec[c] = $("#"+c).value.trim();
   rec.fechaGPS = lat ? ($("#lat").dataset.fecha || previo?.fechaGPS || "") : "";
   rec.creado = previo?.creado || new Date().toISOString();
   rec.actualizado = new Date().toISOString();
@@ -429,7 +434,7 @@ function limpiarForm(){
   $("#f").reset(); $("#id").value=""; codigoManual=false; delete $("#lat").dataset.fecha;
   if (!$("#formTitle").textContent.startsWith("Editar")) Object.entries(keep).forEach(([k,v])=>$("#"+k).value=v);
   $("#formTitle").textContent="Nuevo equipo";
-  $("#codUbic").value=""; actualizarCodUbic(); renderChips([]);
+  $("#codUbic").value=""; actualizarCodUbic(); renderChips([]); $("#patron").value="No";
   if (pickMarker){pickMap.removeLayer(pickMarker);pickMarker=null;}
   $("#gpsMsg").textContent="En el celular activa la ubicación y párate junto al equipo. Se toman varias lecturas y se queda la más precisa.";
 }
@@ -438,7 +443,8 @@ function editar(id){
   irA("form");
   $("#formTitle").textContent = "Editar " + e.codigo;
   $("#id").value = e.id;
-  for (const c of ["codigo","tipo","nombre","magnitud","marca","modelo","serie","estado","ubicacion","ubicEsp","punto","codUbic","responsable","lat","lng","prec"]) $("#"+c).value = e[c] ?? "";
+  for (const c of ["codigo","patron","tipo","nombre","magnitud","marca","modelo","serie","estado","ubicacion","ubicEsp","punto","codUbic","responsable","lat","lng","prec"]) $("#"+c).value = e[c] ?? "";
+  $("#patron").value = esPatron(e) ? "Sí" : "No";
   codigoManual = true; renderChips(partirMag(e.magnitud));
   if (pickMarker){pickMap.removeLayer(pickMarker);pickMarker=null;}
 }
@@ -491,12 +497,12 @@ function renderLista(){
   const gps = e => e.lat ? `<button class="small" onclick="verEnMapa('${e.id}')">📍 Ver</button>` : "—";
   const acc = e => `<button class="small" onclick="editar('${e.id}')">✏️</button> <button class="small danger" onclick="eliminar('${e.id}')">🗑️</button>`;
   $("#tbody").innerHTML = lista.map(e=>`<tr>
-    <td><b>${esc(e.codigo)}</b></td><td>${esc(e.nombre)}</td><td>${esc(e.tipo)}</td><td>${esc(e.magnitud)}</td>
+    <td><b>${esc(e.codigo)}</b>${esPatron(e)?' <span class="badge b-patron">Patrón</span>':""}</td><td>${esc(e.nombre)}</td><td>${esc(e.tipo)}</td><td>${esc(e.magnitud)}</td>
     <td>${esc([e.marca,e.modelo].filter(Boolean).join(" / "))}</td><td>${esc(e.serie)}</td>
     <td><span class="badge b-${esc(e.estado)}">${esc(e.estado)}</span></td><td>${esc(e.ubicacion)}</td><td>${esc(e.codUbic)}</td>
     <td>${esc(e.responsable)}</td><td>${gps(e)}</td><td>${acc(e)}</td></tr>`).join("") || `<tr><td colspan="12">Sin equipos.</td></tr>`;
   $("#cards").innerHTML = lista.map(e=>`<div class="eq">
-    <div style="display:flex;justify-content:space-between;gap:8px"><h3>${esc(e.codigo)}</h3><span class="badge b-${esc(e.estado)}">${esc(e.estado)}</span></div>
+    <div style="display:flex;justify-content:space-between;gap:8px"><h3>${esc(e.codigo)}${esPatron(e)?' <span class="badge b-patron">Patrón</span>':""}</h3><span class="badge b-${esc(e.estado)}">${esc(e.estado)}</span></div>
     <div><b>${esc(e.nombre)}</b> · ${esc(e.tipo)}</div>
     <div class="meta">${esc([e.magnitud,[e.marca,e.modelo].filter(Boolean).join(" "),"Serie: "+(e.serie||"—")].filter(Boolean).join(" · "))}</div>
     <div class="meta">📌 ${esc(e.ubicacion)} ${e.codUbic?"· "+esc(e.codUbic):""} · 👤 ${esc(e.responsable||"—")}</div>
@@ -572,7 +578,7 @@ function descargar(nombre, contenido, tipo){
 }
 const hoy = () => new Date().toISOString().slice(0,10);
 $("#btnExpJSON").onclick = () => descargar(`metrologia-${hoy()}.json`, JSON.stringify(equipos,null,2), "application/json");
-const ENCAB = {codigo:"Código equipo",tipo:"Tipo de equipo",nombre:"Nombre del equipo",magnitud:"Magnitud",marca:"Marca",modelo:"Modelo",serie:"Serie",estado:"Estado",ubicacion:"Ubicación",ubicEsp:"Ubicación específica",punto:"Punto de ubicación",codUbic:"Código de ubicación",responsable:"Responsable",lat:"Latitud",lng:"Longitud",prec:"Precisión (m)",fechaGPS:"Fecha GPS",creado:"Creado",actualizado:"Actualizado"};
+const ENCAB = {codigo:"Código equipo",patron:"Patrón",tipo:"Tipo de equipo",nombre:"Nombre del equipo",magnitud:"Magnitud",marca:"Marca",modelo:"Modelo",serie:"Serie",estado:"Estado",ubicacion:"Ubicación",ubicEsp:"Ubicación específica",punto:"Punto de ubicación",codUbic:"Código de ubicación",responsable:"Responsable",lat:"Latitud",lng:"Longitud",prec:"Precisión (m)",fechaGPS:"Fecha GPS",creado:"Creado",actualizado:"Actualizado"};
 $("#btnExpCSV").onclick = () => {
   const q = v => `"${String(v??"").replace(/"/g,'""')}"`;
   const filas = [CAMPOS.map(c=>q(ENCAB[c])).join(";"), ...equipos.map(e=>CAMPOS.map(c=>q(e[c])).join(";"))];
