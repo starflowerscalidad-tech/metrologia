@@ -65,6 +65,13 @@ th{color:var(--muted);font-size:12px;text-transform:uppercase}
 .count{color:var(--muted);font-size:13px;margin-bottom:8px}
 .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:13px;margin-bottom:8px}
 .dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:4px;vertical-align:middle}
+/* baños */
+.b-MASCULINO{background:#1565c0}.b-FEMENINO{background:#c2185b}.b-MIXTO{background:#6a3fb5}.b-pend{background:var(--grey)}
+#mapBanos{height:420px;border-radius:10px}
+#bPickMap{height:260px;border-radius:8px;margin-top:10px;display:none}
+.sel-bano{font-size:16px;font-weight:700;margin:4px 0 10px}
+td.obs{white-space:normal;min-width:160px;max-width:320px}
+tr.actual td{background:color-mix(in srgb,var(--primary) 12%,transparent)}
 </style>
 </head>
 <body>
@@ -74,6 +81,7 @@ th{color:var(--muted);font-size:12px;text-transform:uppercase}
     <button data-tab="form" class="active">➕ Registrar</button>
     <button data-tab="list">📋 Equipos</button>
     <button data-tab="mapa">🗺️ Mapa</button>
+    <button data-tab="banos">🚻 Baños</button>
     <button data-tab="datos">💾 Datos</button>
   </nav>
 </header>
@@ -195,6 +203,77 @@ th{color:var(--muted);font-size:12px;text-transform:uppercase}
   </div>
 </section>
 
+<!-- ============ BAÑOS ============ -->
+<section id="tab-banos" class="hidden">
+  <div class="card" id="capturaCard">
+    <h2 style="margin-top:0;font-size:17px">📍 Tomar coordenada de baño</h2>
+    <label for="bSel">Baño</label>
+    <select id="bSel"></select>
+    <div class="sel-bano" id="bSelInfo"></div>
+    <div class="gps-box">
+      <div class="grid">
+        <div><label for="bLat">Latitud</label><input id="bLat" inputmode="decimal" placeholder="-12.0464"></div>
+        <div><label for="bLng">Longitud</label><input id="bLng" inputmode="decimal" placeholder="-77.0428"></div>
+        <div><label for="bPrec">Precisión (m)</label><input id="bPrec" readonly></div>
+      </div>
+      <div class="actions">
+        <button type="button" class="primary" id="bBtnGPS">📍 Tomar ubicación GPS</button>
+        <button type="button" id="bBtnPick">🗺️ Elegir / ajustar en mapa</button>
+        <button type="button" id="bBtnClearGPS">Borrar coordenadas</button>
+      </div>
+      <div style="margin-top:12px">
+        <label for="bPegar">Pegar coordenadas o enlace de Google Maps</label>
+        <div class="row"><input id="bPegar" placeholder="-12.046400, -77.042800"><button type="button" class="small" id="bBtnPegar">📋 Usar</button></div>
+        <div class="hint">Si el GPS está bloqueado: en Google Maps mantén presionado tu punto azul, copia las coordenadas que aparecen arriba y pégalas aquí.</div>
+      </div>
+      <div class="hint" id="bGpsMsg">En el celular activa la ubicación y párate en la puerta del baño. Se toman varias lecturas y se queda la más precisa.</div>
+      <div id="bPickMap"></div>
+      <div style="margin-top:12px"><label for="bObs">Observaciones</label><input id="bObs" placeholder="Ej: entrada por pasillo lateral"></div>
+    </div>
+    <div class="actions">
+      <button type="button" class="primary" id="btnGuardarBano">💾 Guardar coordenada</button>
+      <button type="button" id="btnSigBano">Siguiente sin coordenada ➡️</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="filters">
+      <input id="bq" placeholder="Buscar área, área específica, código...">
+      <select id="bfArea"><option value="">Todas las áreas</option></select>
+      <select id="bfTipo"><option value="">Todos los tipos</option><option>MASCULINO</option><option>FEMENINO</option><option>MIXTO</option></select>
+      <select id="bfGps"><option value="">Con y sin GPS</option><option value="si">Con coordenada</option><option value="no">Sin coordenada</option></select>
+    </div>
+    <div class="count" id="bCount"></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Código</th><th>Área</th><th>Área específica</th><th>Tipo de baño</th><th>Latitud</th><th>Longitud</th><th>Precisión</th><th>Observaciones</th><th></th></tr></thead>
+      <tbody id="bTbody"></tbody>
+    </table></div>
+    <div class="cards" id="bCards"></div>
+  </div>
+
+  <div class="card">
+    <div class="legend">
+      <span><span class="dot" style="background:#1565c0"></span>Masculino</span>
+      <span><span class="dot" style="background:#c2185b"></span>Femenino</span>
+      <span><span class="dot" style="background:#6a3fb5"></span>Mixto</span>
+      <span style="flex:1"></span>
+      <select id="bCapa" style="width:auto;padding:6px"><option value="osm">Mapa calles</option><option value="sat">Satélite</option></select>
+    </div>
+    <div id="mapBanos"></div>
+  </div>
+
+  <details class="card">
+    <summary style="cursor:pointer;font-weight:600">➕ Agregar otro baño</summary>
+    <div class="grid" style="margin-top:12px">
+      <div><label for="nArea">Área *</label><input id="nArea" list="dl-bArea"></div>
+      <div><label for="nAreaEsp">Área específica *</label><input id="nAreaEsp"></div>
+      <div><label for="nTipo">Tipo de baño *</label><select id="nTipo"><option>MASCULINO</option><option>FEMENINO</option><option>MIXTO</option></select></div>
+    </div>
+    <div class="actions"><button type="button" class="primary" id="btnAgregarBano">➕ Agregar</button></div>
+  </details>
+  <datalist id="dl-bArea"></datalist>
+</section>
+
 <!-- ============ DATOS ============ -->
 <section id="tab-datos" class="hidden">
   <div class="card">
@@ -215,6 +294,19 @@ th{color:var(--muted);font-size:12px;text-transform:uppercase}
     </div>
     <div class="actions" style="margin-top:24px">
       <button class="danger" id="btnBorrarTodo">🗑️ Borrar todos los datos</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0;font-size:17px">🚻 Datos de baños</h2>
+    <p class="hint" style="font-size:14px">Las coordenadas de los baños se guardan aparte de los equipos. Exporta un respaldo seguido.</p>
+    <div class="actions">
+      <button class="primary" id="bExpJSON">⬇️ Exportar JSON (respaldo)</button>
+      <button id="bExpXLSX">⬇️ Exportar Excel (.xlsx)</button>
+      <button id="bExpCSV">⬇️ Exportar CSV</button>
+    </div>
+    <div style="margin-top:16px">
+      <label for="bFileImp">Importar baños (Excel, JSON o CSV). Combina por código.</label>
+      <input type="file" id="bFileImp" accept=".xlsx,.xls,.json,.csv">
     </div>
   </div>
 </section>
@@ -282,9 +374,10 @@ function llenarFiltrosMag(){
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => irA(b.dataset.tab));
 function irA(tab){
   document.querySelectorAll("nav button").forEach(x => x.classList.toggle("active", x.dataset.tab===tab));
-  for (const t of ["form","list","mapa","datos"]) $("#tab-"+t).classList.toggle("hidden", t!==tab);
+  for (const t of ["form","list","mapa","banos","datos"]) $("#tab-"+t).classList.toggle("hidden", t!==tab);
   if (tab==="list") { llenarFiltrosColumna(); renderLista(); }
   if (tab==="mapa") renderMapa();
+  if (tab==="banos") { llenarFiltrosBanos(); renderBanos(); }
   window.scrollTo(0,0);
 }
 
@@ -679,6 +772,321 @@ $("#btnBorrarTodo").onclick = () => {
   if (!confirm(`¿Borrar los ${equipos.length} equipos de este navegador? Exporta un respaldo antes.`)) return;
   if (prompt('Escribe BORRAR para confirmar')!=="BORRAR") return;
   equipos=[]; guardar(); toast("Datos borrados");
+};
+
+/* =================== BAÑOS =================== */
+const KEY_B = "metrologia_banos_v1";
+const BANOS_BASE = `MH1|MH1-OFICINA|MASCULINO
+MH1|MH1-CULTIVO|MASCULINO
+MH1|MH1-CULTIVO|FEMENINO
+MH1|MH1-BQ21|MASCULINO
+MH1|MH1-BQ21|FEMENINO
+MH2|MH2-OFICINA|MASCULINO
+MH2|MH2-CULTIVO|MASCULINO
+MH2|MH2-CULTIVO|FEMENINO
+MH2|MH2-BQ7|MASCULINO
+MH2|MH2-BQ7|FEMENINO
+CULTIVOS VARIOS|CV-OFICINA|MASCULINO
+CULTIVOS VARIOS|CV-BQ7|MASCULINO
+CULTIVOS VARIOS|CV-BQ7|FEMENINO
+CULTIVOS VARIOS|CV-BQ21|MASCULINO
+CULTIVOS VARIOS|CV-BQ21|FEMENINO
+CULTIVOS VARIOS|TRAS TTHH|MASCULINO
+CULTIVOS VARIOS|TRAS TTHH|FEMENINO
+TTHH|TRAS TTHH|MIXTO
+COMEDOR|COMEDOR|MASCULINO
+COMEDOR|COMEDOR|FEMENINO
+CLS|SALA DE VERDE|MASCULINO
+CLS|SALA DE VERDE|FEMENINO
+CLS|SALA DE BLANCO|MASCULINO
+CLS|SALA DE BLANCO|FEMENINO
+PROP|PROPA-PALMERA|FEMENINO
+PROP|PROPA-ENRAIZADOR|MASCULINO
+PROP|PROPA-ENRAIZADOR|FEMENINO
+MANTENIMIENTO|MANTENIMIENTO|MASCULINO
+TTHH|TALENTO HUMANO|MASCULINO
+TTHH|TALENTO HUMANO|FEMENINO
+ADM|ADMINISTRACION|MASCULINO
+ADM|ADMINISTRACION|FEMENINO
+SIG|OFICINA JEFE SIG|FEMENINO
+SIG|CONSULTORIO MEDICO|MIXTO
+EMPAQUE|OFICINA JEFE EMPAQUE|MASCULINO
+ADM|OFICINA ING. SANTIAGO|MASCULINO
+ADM|SALA DE REUNIONES|MASCULINO
+ADM|OFICINA ING. MAURICIO|MASCULINO
+ADM|OFICINA JEFE SISTEMAS|MASCULINO
+ADM|OFICINA JEFE COSTOS|MASCULINO
+ADM|GERENTE DE PRODUCCION|MASCULINO
+ADM|JEFE DE PRODUCCION|MASCULINO
+LAB|LABORATORIO|MIXTO
+POSTCOSECHA|JEFE POSCOSECHA|MASCULINO
+POSTCOSECHA|COORDINADORA DE EMPAQUE|FEMENINO
+BODEGA|BODEGA|MASCULINO`.split("\n").map((l,i)=>{ const [area,areaEsp,tipo]=l.split("|"); return {codigo:"BAÑO-"+String(i+1).padStart(3,"0"),area,areaEsp,tipo}; });
+const COL_B = {MASCULINO:"#1565c0",FEMENINO:"#c2185b",MIXTO:"#6a3fb5"};
+const CAMPOS_B = ["codigo","area","areaEsp","tipo","lat","lng","prec","fechaGPS","observaciones","actualizado"];
+const ENCAB_B = {codigo:"Código",area:"Área",areaEsp:"Área específica",tipo:"Tipo de baño",lat:"Latitud",lng:"Longitud",prec:"Precisión (m)",fechaGPS:"Fecha GPS",observaciones:"Observaciones",actualizado:"Actualizado"};
+const claveB = b => [b.area,b.areaEsp,b.tipo].map(x=>String(x||"").trim().toUpperCase()).join("|");
+const nuevoId = () => Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+
+let banos = (() => { try { return JSON.parse(localStorage.getItem(KEY_B)) || []; } catch(e){ return []; } })();
+// siembra la lista base (solo agrega los que falten; no toca coordenadas ya tomadas)
+if (!localStorage.getItem(KEY_B+"_sembrado")) {
+  for (const b of BANOS_BASE) if (!banos.some(x=>claveB(x)===claveB(b) || x.codigo===b.codigo)) banos.push({id:nuevoId(),...b,lat:"",lng:"",prec:"",fechaGPS:"",observaciones:""});
+  try { localStorage.setItem(KEY_B+"_sembrado","1"); } catch(e){}
+}
+function guardarB(){ try { localStorage.setItem(KEY_B, JSON.stringify(banos)); } catch(e){ toast("⚠️ No se pudo guardar en el navegador"); } }
+guardarB();
+const tieneGps = b => isFinite(parseFloat(b.lat)) && isFinite(parseFloat(b.lng)) && String(b.lat).trim()!=="";
+const nombreB = b => `${b.codigo} · ${b.area} · ${b.areaEsp} · ${b.tipo}`;
+const ordenB = (a,b) => (a.codigo||"").localeCompare(b.codigo||"",undefined,{numeric:true});
+
+/* ---------- selección y captura ---------- */
+function llenarSelectBanos(){
+  const v = $("#bSel").value;
+  $("#bSel").innerHTML = [...banos].sort(ordenB).map(b=>`<option value="${b.id}">${tieneGps(b)?"✅":"⚪"} ${esc(nombreB(b))}</option>`).join("");
+  if (v && banos.some(b=>b.id===v)) $("#bSel").value = v;
+}
+function seleccionarBano(id, subir){
+  const b = banos.find(x=>x.id===id); if (!b) return;
+  $("#bSel").value = id;
+  $("#bSelInfo").innerHTML = `${esc(b.area)} → ${esc(b.areaEsp)} <span class="badge b-${esc(b.tipo)}">${esc(b.tipo)}</span>`;
+  $("#bLat").value = b.lat||""; $("#bLng").value = b.lng||""; $("#bPrec").value = b.prec||""; $("#bObs").value = b.observaciones||"";
+  delete $("#bLat").dataset.fecha;
+  if (bPickMap) { const lat=parseFloat(b.lat), lng=parseFloat(b.lng); if (isFinite(lat)&&isFinite(lng)) bColocarPick(lat,lng,true); else if (bPickMarker){bPickMap.removeLayer(bPickMarker);bPickMarker=null;} }
+  $("#bGpsMsg").textContent = tieneGps(b) ? "Este baño ya tiene coordenada. Puedes volver a tomarla para reemplazarla." : "En el celular activa la ubicación y párate en la puerta del baño. Se toman varias lecturas y se queda la más precisa.";
+  document.querySelectorAll("#bTbody tr").forEach(tr=>tr.classList.toggle("actual", tr.dataset.id===id));
+  if (subir) $("#capturaCard").scrollIntoView({behavior:"smooth",block:"start"});
+}
+$("#bSel").addEventListener("input", () => seleccionarBano($("#bSel").value));
+$("#btnGuardarBano").onclick = () => {
+  const b = banos.find(x=>x.id===$("#bSel").value); if (!b) return toast("Elige un baño");
+  const lat=$("#bLat").value.trim().replace(",","."), lng=$("#bLng").value.trim().replace(",",".");
+  if ((lat||lng) && !(isFinite(parseFloat(lat)) && isFinite(parseFloat(lng)) && Math.abs(lat)<=90 && Math.abs(lng)<=180)) return toast("Coordenadas no válidas");
+  b.lat = lat ? (+lat).toFixed(6) : ""; b.lng = lng ? (+lng).toFixed(6) : "";
+  b.prec = lat ? $("#bPrec").value : "";
+  b.fechaGPS = lat ? ($("#bLat").dataset.fecha || b.fechaGPS || new Date().toISOString()) : "";
+  b.observaciones = $("#bObs").value.trim();
+  b.actualizado = new Date().toISOString();
+  guardarB(); llenarSelectBanos(); renderBanos();
+  toast(lat ? "✅ Coordenada guardada: "+b.codigo : "Guardado sin coordenada: "+b.codigo);
+};
+$("#btnSigBano").onclick = () => {
+  const lista = [...banos].sort(ordenB);
+  const i = lista.findIndex(b=>b.id===$("#bSel").value);
+  const sig = [...lista.slice(i+1), ...lista.slice(0, i+1)].find(b=>!tieneGps(b));
+  if (!sig) return toast("🎉 Todos los baños tienen coordenada");
+  seleccionarBano(sig.id, true);
+};
+
+/* ---------- GPS ---------- */
+let bWatchId = null;
+$("#bBtnGPS").onclick = () => {
+  const msg = $("#bGpsMsg");
+  if (!("geolocation" in navigator)) { msg.textContent = "Este navegador no permite geolocalización."; return; }
+  if (!window.isSecureContext) msg.textContent = "⚠️ El navegador puede bloquear el GPS si la página no se abre por https://. Intentando...";
+  else msg.textContent = "Buscando señal GPS... (hasta 20 s)";
+  if (bWatchId!==null) navigator.geolocation.clearWatch(bWatchId);
+  let mejor = null;
+  const fin = () => {
+    if (bWatchId!==null) { navigator.geolocation.clearWatch(bWatchId); bWatchId=null; }
+    if (mejor) msg.textContent = `✅ Ubicación tomada con precisión de ±${Math.round(mejor.coords.accuracy)} m. Pulsa "Guardar coordenada".`;
+  };
+  const timer = setTimeout(fin, 20000);
+  bWatchId = navigator.geolocation.watchPosition(p => {
+    if (!mejor || p.coords.accuracy < mejor.coords.accuracy) {
+      mejor = p;
+      bPonerCoords(p.coords.latitude, p.coords.longitude, p.coords.accuracy);
+      msg.textContent = `Mejorando precisión... ±${Math.round(p.coords.accuracy)} m`;
+    }
+    if (p.coords.accuracy <= 10) { clearTimeout(timer); fin(); }
+  }, err => {
+    clearTimeout(timer); fin();
+    const t = {1:"Permiso de ubicación denegado. Actívalo en la configuración del navegador.",2:"No se pudo obtener la posición (¿GPS apagado?).",3:"Se agotó el tiempo buscando señal."};
+    msg.textContent = "❌ " + ((err.code===1 && !window.isSecureContext)
+      ? "El navegador bloquea el GPS porque la página está abierta como archivo. Ábrela desde un enlace https:// o elige el punto en el mapa / pega las coordenadas."
+      : (t[err.code] || err.message));
+  }, {enableHighAccuracy:true, maximumAge:0, timeout:20000});
+};
+function bPonerCoords(lat,lng,prec){
+  $("#bLat").value = (+lat).toFixed(6);
+  $("#bLng").value = (+lng).toFixed(6);
+  $("#bPrec").value = prec!=null ? Math.round(prec) : "";
+  $("#bLat").dataset.fecha = new Date().toISOString();
+  if (bPickMarker) { bPickMarker.setLatLng([lat,lng]); bPickMap.setView([lat,lng], Math.max(bPickMap.getZoom(),17)); }
+}
+function bUsarPegado(txt){
+  txt = decodeURIComponent(String(txt||""));
+  const m = txt.match(/@?(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/) || txt.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+  if (!m) { toast("No encontré coordenadas en el texto"); return; }
+  const lat=parseFloat(m[1]), lng=parseFloat(m[2]);
+  if (Math.abs(lat)>90 || Math.abs(lng)>180) { toast("Coordenadas fuera de rango"); return; }
+  bPonerCoords(lat,lng,null); $("#bPrec").value="pegado"; $("#bPegar").value="";
+  $("#bGpsMsg").textContent = "✅ Coordenadas pegadas. Pulsa \"Guardar coordenada\".";
+}
+$("#bBtnPegar").onclick = async () => {
+  let v = $("#bPegar").value.trim();
+  if (!v && navigator.clipboard?.readText) { try { v = await navigator.clipboard.readText(); } catch(e){} }
+  bUsarPegado(v);
+};
+$("#bBtnClearGPS").onclick = () => { $("#bLat").value=$("#bLng").value=$("#bPrec").value=""; if (bPickMarker){bPickMap.removeLayer(bPickMarker);bPickMarker=null;} };
+
+function centroBanos(){
+  const c = banos.filter(tieneGps);
+  if (c.length) return [parseFloat(c[c.length-1].lat), parseFloat(c[c.length-1].lng)];
+  return [-12.0464,-77.0428];
+}
+let bPickMap=null, bPickMarker=null;
+$("#bBtnPick").onclick = () => {
+  if (!window.L) return toast("No se pudo cargar el mapa (¿sin internet?)");
+  const el = $("#bPickMap");
+  const visible = el.style.display==="block";
+  el.style.display = visible ? "none" : "block";
+  if (visible) return;
+  const lat=parseFloat($("#bLat").value), lng=parseFloat($("#bLng").value);
+  const centro = isFinite(lat)&&isFinite(lng) ? [lat,lng] : centroBanos();
+  if (!bPickMap) {
+    bPickMap = L.map("bPickMap").setView(centro, isFinite(lat)?18:16);
+    capaBase("sat").addTo(bPickMap);
+    bPickMap.on("click", e => bColocarPick(e.latlng.lat, e.latlng.lng));
+  } else bPickMap.setView(centro, isFinite(lat)?18:bPickMap.getZoom());
+  if (isFinite(lat)&&isFinite(lng)) bColocarPick(lat,lng,true);
+  setTimeout(()=>bPickMap.invalidateSize(),50);
+  $("#bGpsMsg").textContent = "Toca el mapa o arrastra el marcador para fijar el punto.";
+};
+function bColocarPick(lat,lng,soloMarcador){
+  if (!bPickMarker) {
+    bPickMarker = L.marker([lat,lng],{draggable:true}).addTo(bPickMap);
+    bPickMarker.on("dragend", e => { const p=e.target.getLatLng(); $("#bLat").value=p.lat.toFixed(6); $("#bLng").value=p.lng.toFixed(6); $("#bPrec").value="manual"; });
+  } else bPickMarker.setLatLng([lat,lng]);
+  if (!soloMarcador){ $("#bLat").value=lat.toFixed(6); $("#bLng").value=lng.toFixed(6); $("#bPrec").value="manual"; }
+}
+
+/* ---------- lista de baños ---------- */
+["#bq","#bfArea","#bfTipo","#bfGps"].forEach(s=>$(s).addEventListener("input",renderBanos));
+function llenarFiltrosBanos(){
+  const v = $("#bfArea").value;
+  const areas = [...new Set(banos.map(b=>b.area).filter(Boolean))].sort();
+  $("#bfArea").innerHTML = `<option value="">Todas las áreas</option>` + areas.map(a=>`<option>${esc(a)}</option>`).join("");
+  $("#bfArea").value = areas.includes(v) ? v : "";
+  $("#dl-bArea").innerHTML = areas.map(a=>`<option value="${esc(a)}">`).join("");
+  llenarSelectBanos();
+  if (!$("#bSelInfo").textContent && banos.length) seleccionarBano($("#bSel").value);
+}
+function filtradosBanos(){
+  const q=$("#bq").value.toLowerCase(), a=$("#bfArea").value, t=$("#bfTipo").value, g=$("#bfGps").value;
+  return banos.filter(b => (!a||b.area===a) && (!t||b.tipo===t) && (!g || (g==="si")===tieneGps(b)) &&
+    (!q || CAMPOS_B.some(c=>String(b[c]||"").toLowerCase().includes(q)))).sort(ordenB);
+}
+function renderBanos(){
+  const lista = filtradosBanos();
+  const con = banos.filter(tieneGps).length;
+  $("#bCount").textContent = `${lista.length} de ${banos.length} baños · ${con} con coordenada · ${banos.length-con} pendientes`;
+  const precTxt = b => b.prec ? (isNaN(b.prec) ? b.prec : "±"+b.prec+" m") : "";
+  const acc = b => `<button class="small primary" onclick="seleccionarBano('${b.id}',true)">📍 Tomar</button>`
+    + (tieneGps(b) ? ` <button class="small" onclick="verBano('${b.id}')">🗺️</button>` : "")
+    + ` <button class="small danger" onclick="eliminarBano('${b.id}')">🗑️</button>`;
+  const sel = $("#bSel").value;
+  $("#bTbody").innerHTML = lista.map(b=>`<tr data-id="${b.id}"${b.id===sel?' class="actual"':""}>
+    <td><b>${esc(b.codigo)}</b></td><td>${esc(b.area)}</td><td>${esc(b.areaEsp)}</td><td><span class="badge b-${esc(b.tipo)}">${esc(b.tipo)}</span></td>
+    <td>${esc(b.lat)||'<span class="badge b-pend">Pendiente</span>'}</td><td>${esc(b.lng)}</td><td>${esc(precTxt(b))}</td><td class="obs">${esc(b.observaciones)}</td><td>${acc(b)}</td></tr>`).join("")
+    || `<tr><td colspan="9">Sin baños.</td></tr>`;
+  $("#bCards").innerHTML = lista.map(b=>`<div class="eq">
+    <div style="display:flex;justify-content:space-between;gap:8px"><h3>${esc(b.areaEsp)}</h3><span class="badge b-${esc(b.tipo)}">${esc(b.tipo)}</span></div>
+    <div class="meta">${esc(b.codigo)} · ${esc(b.area)}</div>
+    <div class="meta">${tieneGps(b) ? `✅ ${esc(b.lat)}, ${esc(b.lng)} ${esc(precTxt(b))}` : '⚪ Sin coordenada'}</div>
+    ${b.observaciones?`<div class="meta">📝 ${esc(b.observaciones)}</div>`:""}
+    <div class="actions" style="margin-top:8px">${acc(b)}</div></div>`).join("") || "<p>Sin baños.</p>";
+  renderMapaBanos(lista);
+}
+function eliminarBano(id){
+  const b = banos.find(x=>x.id===id); if (!b) return;
+  if (!confirm(`¿Eliminar ${nombreB(b)}?`)) return;
+  banos = banos.filter(x=>x.id!==id); guardarB(); llenarFiltrosBanos(); renderBanos(); toast("Baño eliminado");
+}
+$("#btnAgregarBano").onclick = () => {
+  const area=$("#nArea").value.trim().toUpperCase(), areaEsp=$("#nAreaEsp").value.trim().toUpperCase(), tipo=$("#nTipo").value;
+  if (!area || !areaEsp) return toast("Completa área y área específica");
+  if (banos.some(b=>claveB(b)===claveB({area,areaEsp,tipo}))) return toast("Ese baño ya existe");
+  const max = banos.reduce((m,b)=>Math.max(m, parseInt(String(b.codigo).replace(/\D/g,""),10)||0), 0);
+  const b = {id:nuevoId(), codigo:"BAÑO-"+String(max+1).padStart(3,"0"), area, areaEsp, tipo, lat:"", lng:"", prec:"", fechaGPS:"", observaciones:""};
+  banos.push(b); guardarB(); $("#nAreaEsp").value="";
+  llenarFiltrosBanos(); renderBanos(); seleccionarBano(b.id, true); toast("✅ Agregado "+b.codigo);
+};
+
+/* ---------- mapa de baños ---------- */
+let mapaB=null, capaB=null, grupoB=null, marcB={};
+function renderMapaBanos(lista){
+  if (!window.L) return;
+  if (!mapaB) {
+    mapaB = L.map("mapBanos").setView(centroBanos(), 16);
+    capaB = capaBase($("#bCapa").value).addTo(mapaB);
+    grupoB = L.featureGroup().addTo(mapaB);
+  }
+  setTimeout(()=>mapaB.invalidateSize(),50);
+  grupoB.clearLayers(); marcB={};
+  const conGps = lista.filter(tieneGps);
+  for (const b of conGps) {
+    const m = L.circleMarker([+b.lat,+b.lng],{radius:9,color:"#fff",weight:2,fillColor:COL_B[b.tipo]||"#0b6bcb",fillOpacity:.95});
+    m.bindPopup(`<b>${esc(b.codigo)}</b><br>${esc(b.area)} · ${esc(b.areaEsp)}<br>${esc(b.tipo)}<br>
+      <small>${(+b.lat).toFixed(6)}, ${(+b.lng).toFixed(6)}</small><br>
+      <a href="https://www.google.com/maps?q=${+b.lat},${+b.lng}" target="_blank" rel="noopener">Abrir en Google Maps</a>`);
+    m.bindTooltip(esc(b.areaEsp+" ("+b.tipo.charAt(0)+")"));
+    m.addTo(grupoB); marcB[b.id]=m;
+  }
+  if (conGps.length) mapaB.fitBounds(grupoB.getBounds(),{padding:[30,30],maxZoom:18});
+}
+$("#bCapa").addEventListener("input",()=>{ if(!mapaB)return; mapaB.removeLayer(capaB); capaB=capaBase($("#bCapa").value).addTo(mapaB); });
+function verBano(id){ const m=marcB[id]; if (!m) return; $("#mapBanos").scrollIntoView({behavior:"smooth"}); mapaB.setView(m.getLatLng(),19); m.openPopup(); }
+
+/* ---------- exportar / importar baños ---------- */
+$("#bExpJSON").onclick = () => descargar(`banos-${hoy()}.json`, JSON.stringify(banos,null,2), "application/json");
+$("#bExpCSV").onclick = () => {
+  const q = v => `"${String(v??"").replace(/"/g,'""')}"`;
+  const filas = [CAMPOS_B.map(c=>q(ENCAB_B[c])).join(";"), ...[...banos].sort(ordenB).map(b=>CAMPOS_B.map(c=>q(b[c])).join(";"))];
+  descargar(`banos-${hoy()}.csv`, "﻿"+filas.join("\r\n"), "text/csv;charset=utf-8");
+};
+$("#bExpXLSX").onclick = async () => {
+  try {
+    const X = await cargarXLSX();
+    const filas = [CAMPOS_B.map(c=>ENCAB_B[c]), ...[...banos].sort(ordenB).map(b=>CAMPOS_B.map(c => (c==="lat"||c==="lng") && tieneGps(b) ? Number(b[c]) : (b[c] ?? "")))];
+    const ws = X.utils.aoa_to_sheet(filas);
+    ws["!cols"] = CAMPOS_B.map(c=>({wch: c==="areaEsp"||c==="observaciones" ? 28 : Math.max(12, ENCAB_B[c].length+2)}));
+    const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, "Baños");
+    X.writeFile(wb, `banos-${hoy()}.xlsx`);
+  } catch(e){ toast("❌ "+e.message); }
+};
+$("#bFileImp").onchange = async ev => {
+  const file = ev.target.files[0]; if (!file) return;
+  try {
+    const nombre = file.name.toLowerCase();
+    let rows;
+    if (/\.xlsx?$/.test(nombre)) {
+      const X = await cargarXLSX();
+      const wb = X.read(await file.arrayBuffer(), {type:"array"});
+      rows = X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, raw:false, defval:""});
+    } else if (nombre.endsWith(".json")) rows = null;
+    else { const txt=(await file.text()).replace(/^﻿/,""); const sep=(txt.split("\n")[0].match(/;/g)||[]).length?";":","; rows = txt.split(/\r?\n/).map(l=>l.split(sep).map(x=>x.replace(/^"|"$/g,"").replace(/""/g,'"'))); }
+    let datos;
+    if (rows) {
+      const norm = t => String(t).normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().trim();
+      const inv = Object.fromEntries(Object.entries(ENCAB_B).map(([k,v])=>[norm(v),k]));
+      Object.assign(inv, {"area especifica":"areaEsp","tipo de bano m/f":"tipo","tipo":"tipo"});
+      const keys = rows.shift().map(h=>inv[norm(h)]||null);
+      datos = rows.filter(r=>r.some(x=>String(x).trim())).map(r=>{ const o={}; keys.forEach((k,i)=>{ if(k) o[k]=String(r[i]??"").trim(); }); return o; });
+    } else datos = JSON.parse(await file.text());
+    if (!Array.isArray(datos)) throw new Error("formato no válido");
+    let nuevos=0, act=0;
+    for (const d of datos) {
+      if (!d || !(d.codigo || d.areaEsp)) continue;
+      if (d.tipo) d.tipo = String(d.tipo).toUpperCase().trim();
+      const ex = banos.find(b => (d.codigo && b.codigo===d.codigo) || claveB(b)===claveB(d));
+      if (ex) { Object.assign(ex, d, {id:ex.id}); act++; }
+      else { banos.push({id:nuevoId(), codigo:d.codigo||("BAÑO-"+String(banos.length+1).padStart(3,"0")), lat:"",lng:"",prec:"",fechaGPS:"",observaciones:"", ...d}); nuevos++; }
+    }
+    guardarB(); llenarFiltrosBanos(); renderBanos();
+    toast(`Baños importados: ${nuevos} nuevos, ${act} actualizados`);
+  } catch(e){ toast("❌ No se pudo leer el archivo: "+e.message); }
+  ev.target.value="";
 };
 
 actualizarDatalists(); renderChips([]);
