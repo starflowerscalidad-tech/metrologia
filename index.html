@@ -71,6 +71,8 @@ th{color:var(--muted);font-size:12px;text-transform:uppercase}
 #bPickMap{height:260px;border-radius:8px;margin-top:10px;display:none}
 .sel-bano{font-size:16px;font-weight:700;margin:4px 0 10px}
 td.obs{white-space:normal;min-width:160px;max-width:320px}
+.pick-map{height:260px;border-radius:8px;margin-top:10px;display:none}
+.map-puntos{height:420px;border-radius:10px}
 tr.actual td{background:color-mix(in srgb,var(--primary) 12%,transparent)}
 </style>
 </head>
@@ -82,6 +84,8 @@ tr.actual td{background:color-mix(in srgb,var(--primary) 12%,transparent)}
     <button data-tab="list">📋 Equipos</button>
     <button data-tab="mapa">🗺️ Mapa</button>
     <button data-tab="banos">🚻 Baños</button>
+    <button data-tab="generadores">⚡ Generadores</button>
+    <button data-tab="combustible">⛽ Combustible</button>
     <button data-tab="datos">💾 Datos</button>
   </nav>
 </header>
@@ -274,6 +278,10 @@ tr.actual td{background:color-mix(in srgb,var(--primary) 12%,transparent)}
   <datalist id="dl-bArea"></datalist>
 </section>
 
+<!-- ============ GENERADORES / COMBUSTIBLE (se arman desde el script) ============ -->
+<section id="tab-generadores" class="hidden"></section>
+<section id="tab-combustible" class="hidden"></section>
+
 <!-- ============ DATOS ============ -->
 <section id="tab-datos" class="hidden">
   <div class="card">
@@ -374,10 +382,12 @@ function llenarFiltrosMag(){
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => irA(b.dataset.tab));
 function irA(tab){
   document.querySelectorAll("nav button").forEach(x => x.classList.toggle("active", x.dataset.tab===tab));
-  for (const t of ["form","list","mapa","banos","datos"]) $("#tab-"+t).classList.toggle("hidden", t!==tab);
+  for (const t of ["form","list","mapa","banos","generadores","combustible","datos"]) $("#tab-"+t).classList.toggle("hidden", t!==tab);
   if (tab==="list") { llenarFiltrosColumna(); renderLista(); }
   if (tab==="mapa") renderMapa();
   if (tab==="banos") { llenarFiltrosBanos(); renderBanos(); }
+  if (tab==="generadores") pestGen.abrir();
+  if (tab==="combustible") pestComb.abrir();
   window.scrollTo(0,0);
 }
 
@@ -1088,6 +1098,298 @@ $("#bFileImp").onchange = async ev => {
   } catch(e){ toast("❌ No se pudo leer el archivo: "+e.message); }
   ev.target.value="";
 };
+
+/* =================== PESTAÑAS DE PUNTOS CON COORDENADAS (generadores, combustible) =================== */
+function crearPestanaPuntos(cfg){
+  const P = cfg.p, id = s => `${P}-${s}`, q1 = s => $("#"+id(s));
+  const nid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+  let datos = (() => { try { return JSON.parse(localStorage.getItem(cfg.key)) || []; } catch(e){ return []; } })();
+  const guardarP = () => { try { localStorage.setItem(cfg.key, JSON.stringify(datos)); } catch(e){ toast("⚠️ No se pudo guardar en el navegador"); } };
+  const conGps = r => String(r.lat??"").trim()!=="" && isFinite(parseFloat(r.lat)) && isFinite(parseFloat(r.lng));
+  const orden = (a,b) => (a.codigo||"").localeCompare(b.codigo||"",undefined,{numeric:true});
+  const CAMPOS_P = ["codigo", ...cfg.campos.map(c=>c.k), "lat","lng","prec","fechaGPS","observaciones","actualizado"];
+  const ENC = {codigo:"Código", ...Object.fromEntries(cfg.campos.map(c=>[c.k,c.label])), lat:"Latitud",lng:"Longitud",prec:"Precisión (m)",fechaGPS:"Fecha GPS",observaciones:"Observaciones",actualizado:"Actualizado"};
+  const campoHTML = c => c.opciones
+    ? `<div><label for="${id(c.k)}">${c.label}${c.req?" *":""}</label><input id="${id(c.k)}" list="${id("dl-"+c.k)}" placeholder="${c.ph||""}"${c.req?" required":""}><datalist id="${id("dl-"+c.k)}"></datalist></div>`
+    : `<div><label for="${id(c.k)}">${c.label}${c.req?" *":""}</label><input id="${id(c.k)}" list="${id("dl-"+c.k)}" placeholder="${c.ph||""}"${c.req?" required":""}><datalist id="${id("dl-"+c.k)}"></datalist></div>`;
+  const filtroCol = cfg.campos.find(c=>c.filtro);
+  $("#tab-"+cfg.tab).innerHTML = `
+  <form class="card" id="${id("f")}" autocomplete="off">
+    <h2 id="${id("titulo")}" style="margin-top:0;font-size:17px">${cfg.nuevo}</h2>
+    <input type="hidden" id="${id("id")}">
+    <div class="grid">
+      ${cfg.campos.map(campoHTML).join("")}
+      <div><label for="${id("codigo")}">Código *</label><input id="${id("codigo")}" required>
+        <div class="hint">Se genera solo (${cfg.pref}-001, ${cfg.pref}-002...). Puedes editarlo.</div></div>
+    </div>
+    <div class="gps-box" style="margin-top:14px">
+      <label>Geolocalización</label>
+      <div class="grid">
+        <div><label for="${id("lat")}">Latitud</label><input id="${id("lat")}" inputmode="decimal" placeholder="-12.0464"></div>
+        <div><label for="${id("lng")}">Longitud</label><input id="${id("lng")}" inputmode="decimal" placeholder="-77.0428"></div>
+        <div><label for="${id("prec")}">Precisión (m)</label><input id="${id("prec")}" readonly></div>
+      </div>
+      <div class="actions">
+        <button type="button" class="primary" id="${id("gps")}">📍 Tomar ubicación GPS</button>
+        <button type="button" id="${id("pick")}">🗺️ Elegir / ajustar en mapa</button>
+        <button type="button" id="${id("clear")}">Borrar coordenadas</button>
+      </div>
+      <div style="margin-top:12px">
+        <label for="${id("pegar")}">Pegar coordenadas o enlace de Google Maps</label>
+        <div class="row"><input id="${id("pegar")}" placeholder="-12.046400, -77.042800"><button type="button" class="small" id="${id("btnPegar")}">📋 Usar</button></div>
+        <div class="hint">Si el GPS está bloqueado: en Google Maps mantén presionado tu punto azul, copia las coordenadas que aparecen arriba y pégalas aquí.</div>
+      </div>
+      <div class="hint" id="${id("msg")}">${cfg.msgGps}</div>
+      <div id="${id("pickMap")}" class="pick-map"></div>
+      <div style="margin-top:12px"><label for="${id("obs")}">Observaciones</label><input id="${id("obs")}"></div>
+    </div>
+    <div class="actions">
+      <button type="submit" class="primary">💾 Guardar</button>
+      <button type="button" id="${id("nuevo")}">Limpiar / nuevo</button>
+    </div>
+  </form>
+  <div class="card">
+    <div class="filters">
+      <input id="${id("q")}" placeholder="Buscar código, área, ${cfg.buscarTxt}...">
+      <select id="${id("fArea")}"><option value="">Todas las áreas</option></select>
+      ${filtroCol ? `<select id="${id("fCol")}"><option value="">${filtroCol.todos}</option></select>` : `<span></span>`}
+      <select id="${id("fGps")}"><option value="">Con y sin GPS</option><option value="si">Con coordenada</option><option value="no">Sin coordenada</option></select>
+    </div>
+    <div class="count" id="${id("count")}"></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Código</th>${cfg.campos.map(c=>`<th>${c.label}</th>`).join("")}<th>Latitud</th><th>Longitud</th><th>Precisión</th><th>Observaciones</th><th></th></tr></thead>
+      <tbody id="${id("tbody")}"></tbody>
+    </table></div>
+    <div class="cards" id="${id("cards")}"></div>
+    <div class="actions">
+      <button class="small" id="${id("expX")}">⬇️ Exportar Excel</button>
+      <button class="small" id="${id("expC")}">⬇️ Exportar CSV</button>
+      <button class="small" id="${id("expJ")}">⬇️ Respaldo JSON</button>
+      <label class="small" style="display:inline-flex;align-items:center;gap:6px;margin:0;font-weight:400;cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:6px 10px;color:var(--text)">⬆️ Importar (Excel, JSON o CSV)<input type="file" id="${id("imp")}" accept=".xlsx,.xls,.json,.csv" style="display:none"></label>
+    </div>
+  </div>
+  <div class="card">
+    <div class="legend"><span id="${id("mCount")}" style="color:var(--muted)"></span><span style="flex:1"></span>
+      <select id="${id("capa")}" style="width:auto;padding:6px"><option value="sat">Satélite</option><option value="osm">Mapa calles</option></select></div>
+    <div id="${id("map")}" class="map-puntos"></div>
+  </div>`;
+
+  /* ---- autocompletar ---- */
+  function datalists(){
+    for (const c of cfg.campos) {
+      const vals = [...new Set([...(c.opciones||[]), ...datos.map(r=>r[c.k]).filter(Boolean)])];
+      if (!c.opciones) vals.sort();
+      q1("dl-"+c.k).innerHTML = vals.map(v=>`<option value="${esc(v)}">`).join("");
+    }
+  }
+  /* ---- código ---- */
+  let manual = false;
+  function generar(){
+    const pref = cfg.pref+"-", act = q1("id").value;
+    let max = 0;
+    for (const r of datos) { if (r.id===act) continue; const c=(r.codigo||"").toUpperCase(); if (c.startsWith(pref)) { const n=parseInt(c.slice(pref.length),10); if (n>max) max=n; } }
+    return pref + String(max+1).padStart(3,"0");
+  }
+  q1("codigo").addEventListener("input", () => manual = true);
+  /* ---- GPS ---- */
+  let watch = null, pMap = null, pMark = null;
+  function poner(lat,lng,prec){
+    q1("lat").value=(+lat).toFixed(6); q1("lng").value=(+lng).toFixed(6); q1("prec").value = prec!=null ? Math.round(prec) : "";
+    q1("lat").dataset.fecha = new Date().toISOString();
+    if (pMark) { pMark.setLatLng([lat,lng]); pMap.setView([lat,lng], Math.max(pMap.getZoom(),17)); }
+  }
+  q1("gps").onclick = () => {
+    const msg = q1("msg");
+    if (!("geolocation" in navigator)) { msg.textContent = "Este navegador no permite geolocalización."; return; }
+    msg.textContent = window.isSecureContext ? "Buscando señal GPS... (hasta 20 s)" : "⚠️ El navegador puede bloquear el GPS si la página no se abre por https://. Intentando...";
+    if (watch!==null) navigator.geolocation.clearWatch(watch);
+    let mejor = null;
+    const fin = () => { if (watch!==null) { navigator.geolocation.clearWatch(watch); watch=null; }
+      if (mejor) msg.textContent = `✅ Ubicación tomada con precisión de ±${Math.round(mejor.coords.accuracy)} m. Pulsa "Guardar".`; };
+    const timer = setTimeout(fin, 20000);
+    watch = navigator.geolocation.watchPosition(p => {
+      if (!mejor || p.coords.accuracy < mejor.coords.accuracy) { mejor=p; poner(p.coords.latitude,p.coords.longitude,p.coords.accuracy); msg.textContent=`Mejorando precisión... ±${Math.round(p.coords.accuracy)} m`; }
+      if (p.coords.accuracy <= 10) { clearTimeout(timer); fin(); }
+    }, err => {
+      clearTimeout(timer); fin();
+      const t = {1:"Permiso de ubicación denegado. Actívalo en la configuración del navegador.",2:"No se pudo obtener la posición (¿GPS apagado?).",3:"Se agotó el tiempo buscando señal."};
+      msg.textContent = "❌ " + ((err.code===1 && !window.isSecureContext) ? "El navegador bloquea el GPS porque la página está abierta como archivo. Ábrela desde el enlace https:// o elige el punto en el mapa / pega las coordenadas." : (t[err.code] || err.message));
+    }, {enableHighAccuracy:true, maximumAge:0, timeout:20000});
+  };
+  q1("btnPegar").onclick = async () => {
+    let v = q1("pegar").value.trim();
+    if (!v && navigator.clipboard?.readText) { try { v = await navigator.clipboard.readText(); } catch(e){} }
+    v = decodeURIComponent(String(v||""));
+    const m = v.match(/@?(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/) || v.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+    if (!m) return toast("No encontré coordenadas en el texto");
+    const lat=parseFloat(m[1]), lng=parseFloat(m[2]);
+    if (Math.abs(lat)>90 || Math.abs(lng)>180) return toast("Coordenadas fuera de rango");
+    poner(lat,lng,null); q1("prec").value="pegado"; q1("pegar").value="";
+    q1("msg").textContent = "✅ Coordenadas pegadas. Pulsa \"Guardar\".";
+  };
+  const quitarMarca = () => { if (pMark){ pMap.removeLayer(pMark); pMark=null; } };
+  q1("clear").onclick = () => { q1("lat").value=q1("lng").value=q1("prec").value=""; quitarMarca(); };
+  const centro = () => { const c=datos.filter(conGps); return c.length ? [+c[c.length-1].lat, +c[c.length-1].lng] : (typeof centroDatos==="function" ? centroDatos() : [-12.0464,-77.0428]); };
+  function marcar(lat,lng,solo){
+    if (!pMark) { pMark = L.marker([lat,lng],{draggable:true}).addTo(pMap);
+      pMark.on("dragend", e => { const p=e.target.getLatLng(); q1("lat").value=p.lat.toFixed(6); q1("lng").value=p.lng.toFixed(6); q1("prec").value="manual"; }); }
+    else pMark.setLatLng([lat,lng]);
+    if (!solo) { q1("lat").value=lat.toFixed(6); q1("lng").value=lng.toFixed(6); q1("prec").value="manual"; }
+  }
+  q1("pick").onclick = () => {
+    if (!window.L) return toast("No se pudo cargar el mapa (¿sin internet?)");
+    const el = q1("pickMap"), vis = el.style.display==="block";
+    el.style.display = vis ? "none" : "block"; if (vis) return;
+    const lat=parseFloat(q1("lat").value), lng=parseFloat(q1("lng").value), ok=isFinite(lat)&&isFinite(lng);
+    if (!pMap) { pMap = L.map(id("pickMap")).setView(ok?[lat,lng]:centro(), ok?18:16); capaBase("sat").addTo(pMap); pMap.on("click", e => marcar(e.latlng.lat, e.latlng.lng)); }
+    else pMap.setView(ok?[lat,lng]:centro(), ok?18:pMap.getZoom());
+    if (ok) marcar(lat,lng,true);
+    setTimeout(()=>pMap.invalidateSize(),50);
+    q1("msg").textContent = "Toca el mapa o arrastra el marcador para fijar el punto.";
+  };
+  /* ---- formulario ---- */
+  function limpiar(){
+    const area = q1("area").value, edit = q1("titulo").textContent.startsWith("Editar");
+    q1("f").reset(); q1("id").value=""; manual=false; delete q1("lat").dataset.fecha; quitarMarca();
+    if (!edit) q1("area").value = area;
+    q1("titulo").textContent = cfg.nuevo; q1("codigo").value = generar(); q1("msg").textContent = cfg.msgGps;
+  }
+  q1("nuevo").onclick = limpiar;
+  q1("f").onsubmit = ev => {
+    ev.preventDefault();
+    const rid = q1("id").value || nid(), codigo = q1("codigo").value.trim().toUpperCase();
+    if (datos.some(r=>r.id!==rid && (r.codigo||"").toUpperCase()===codigo)) return toast("⚠️ Ya existe el código "+codigo);
+    const lat=q1("lat").value.trim().replace(",","."), lng=q1("lng").value.trim().replace(",",".");
+    if ((lat||lng) && !(isFinite(parseFloat(lat)) && isFinite(parseFloat(lng)) && Math.abs(lat)<=90 && Math.abs(lng)<=180)) return toast("Coordenadas no válidas");
+    const previo = datos.find(r=>r.id===rid), rec = {id:rid, codigo};
+    for (const c of cfg.campos) rec[c.k] = q1(c.k).value.trim();
+    rec.lat = lat ? (+lat).toFixed(6) : ""; rec.lng = lng ? (+lng).toFixed(6) : ""; rec.prec = lat ? q1("prec").value : "";
+    rec.fechaGPS = lat ? (q1("lat").dataset.fecha || previo?.fechaGPS || new Date().toISOString()) : "";
+    rec.observaciones = q1("obs").value.trim(); rec.actualizado = new Date().toISOString();
+    if (previo) Object.assign(previo, rec); else datos.push(rec);
+    guardarP(); datalists(); llenarFiltrosP(); render();
+    toast((previo ? "✅ Actualizado " : "✅ Registrado ") + codigo + (lat ? "" : " (sin coordenada)"));
+    limpiar();
+  };
+  function editarP(rid){
+    const r = datos.find(x=>x.id===rid); if (!r) return;
+    q1("titulo").textContent = "Editar " + r.codigo; q1("id").value = r.id; q1("codigo").value = r.codigo; manual = true;
+    for (const c of cfg.campos) q1(c.k).value = r[c.k] ?? "";
+    q1("lat").value=r.lat||""; q1("lng").value=r.lng||""; q1("prec").value=r.prec||""; q1("obs").value=r.observaciones||"";
+    delete q1("lat").dataset.fecha; quitarMarca();
+    if (pMap && conGps(r) && q1("pickMap").style.display==="block") marcar(+r.lat,+r.lng,true);
+    q1("f").scrollIntoView({behavior:"smooth",block:"start"});
+  }
+  function eliminarP(rid){
+    const r = datos.find(x=>x.id===rid); if (!r) return;
+    if (!confirm(`¿Eliminar ${r.codigo}?`)) return;
+    datos = datos.filter(x=>x.id!==rid); guardarP(); llenarFiltrosP(); render(); toast("Eliminado");
+  }
+  /* ---- lista ---- */
+  function llenarFiltrosP(){
+    const opts = (sel, k, todos) => { const v=sel.value; const vals=[...new Set(datos.map(r=>r[k]).filter(Boolean))].sort();
+      sel.innerHTML = `<option value="">${todos}</option>` + vals.map(x=>`<option>${esc(x)}</option>`).join(""); sel.value = vals.includes(v)?v:""; };
+    opts(q1("fArea"), "area", "Todas las áreas");
+    if (filtroCol) opts(q1("fCol"), filtroCol.k, filtroCol.todos);
+  }
+  function lista(){
+    const q=q1("q").value.toLowerCase(), a=q1("fArea").value, f=filtroCol?q1("fCol").value:"", g=q1("fGps").value;
+    return datos.filter(r => (!a||r.area===a) && (!f||r[filtroCol.k]===f) && (!g||(g==="si")===conGps(r)) &&
+      (!q || CAMPOS_P.some(c=>String(r[c]||"").toLowerCase().includes(q)))).sort(orden);
+  }
+  const acciones = r => `<button class="small" data-a="ed" data-id="${r.id}">✏️</button>` + (conGps(r)?` <button class="small" data-a="map" data-id="${r.id}">🗺️</button>`:"") + ` <button class="small danger" data-a="del" data-id="${r.id}">🗑️</button>`;
+  const precTxt = r => r.prec ? (isNaN(r.prec) ? r.prec : "±"+r.prec+" m") : "";
+  function render(){
+    const l = lista(), con = datos.filter(conGps).length;
+    q1("count").textContent = `${l.length} de ${datos.length} ${cfg.plural} · ${con} con coordenada · ${datos.length-con} sin coordenada`;
+    q1("tbody").innerHTML = l.map(r=>`<tr><td><b>${esc(r.codigo)}</b></td>${cfg.campos.map(c=>`<td>${esc(r[c.k])}</td>`).join("")}
+      <td>${esc(r.lat)||'<span class="badge b-pend">Pendiente</span>'}</td><td>${esc(r.lng)}</td><td>${esc(precTxt(r))}</td><td class="obs">${esc(r.observaciones)}</td><td>${acciones(r)}</td></tr>`).join("")
+      || `<tr><td colspan="${cfg.campos.length+6}">Sin registros.</td></tr>`;
+    q1("cards").innerHTML = l.map(r=>`<div class="eq"><h3>${esc(r.codigo)}</h3>
+      <div>${cfg.campos.map(c=>`<b>${c.label}:</b> ${esc(r[c.k]||"—")}`).join(" · ")}</div>
+      <div class="meta">${conGps(r) ? `✅ ${esc(r.lat)}, ${esc(r.lng)} ${esc(precTxt(r))}` : "⚪ Sin coordenada"}</div>
+      ${r.observaciones?`<div class="meta">📝 ${esc(r.observaciones)}</div>`:""}
+      <div class="actions" style="margin-top:8px">${acciones(r)}</div></div>`).join("") || "<p>Sin registros.</p>";
+    renderMapaP(l);
+  }
+  $("#tab-"+cfg.tab).addEventListener("click", ev => {
+    const b = ev.target.closest("button[data-a]"); if (!b) return;
+    const a = b.dataset.a, rid = b.dataset.id;
+    if (a==="ed") editarP(rid); else if (a==="del") eliminarP(rid);
+    else if (a==="map") { const m=marcas[rid]; if (m){ q1("map").scrollIntoView({behavior:"smooth"}); mapa.setView(m.getLatLng(),19); m.openPopup(); } }
+  });
+  ["q","fArea","fCol","fGps"].forEach(s => q1(s) && q1(s).addEventListener("input", render));
+  /* ---- mapa ---- */
+  let mapa=null, capa=null, grupo=null, marcas={};
+  function renderMapaP(l){
+    if (!window.L) return;
+    if (!mapa) { mapa = L.map(id("map")).setView(centro(), 16); capa = capaBase(q1("capa").value).addTo(mapa); grupo = L.featureGroup().addTo(mapa); }
+    setTimeout(()=>mapa.invalidateSize(),50);
+    grupo.clearLayers(); marcas={};
+    const pts = l.filter(conGps);
+    for (const r of pts) {
+      const m = L.circleMarker([+r.lat,+r.lng],{radius:9,color:"#fff",weight:2,fillColor:(cfg.color && cfg.color(r)) || cfg.colorBase,fillOpacity:.95});
+      m.bindPopup(`<b>${esc(r.codigo)}</b><br>${cfg.campos.map(c=>`${c.label}: ${esc(r[c.k]||"—")}`).join("<br>")}<br><small>${(+r.lat).toFixed(6)}, ${(+r.lng).toFixed(6)}</small><br>
+        <a href="https://www.google.com/maps?q=${+r.lat},${+r.lng}" target="_blank" rel="noopener">Abrir en Google Maps</a>`);
+      m.bindTooltip(esc(r.codigo+" · "+(r.area||""))); m.addTo(grupo); marcas[r.id]=m;
+    }
+    q1("mCount").textContent = `${pts.length} puntos en el mapa`;
+    if (pts.length) mapa.fitBounds(grupo.getBounds(),{padding:[30,30],maxZoom:18});
+  }
+  q1("capa").addEventListener("input", () => { if (!mapa) return; mapa.removeLayer(capa); capa = capaBase(q1("capa").value).addTo(mapa); });
+  /* ---- exportar / importar ---- */
+  const nombreArch = ext => `${cfg.archivo}-${hoy()}.${ext}`;
+  q1("expJ").onclick = () => descargar(nombreArch("json"), JSON.stringify(datos,null,2), "application/json");
+  q1("expC").onclick = () => { const qq = v => `"${String(v??"").replace(/"/g,'""')}"`;
+    descargar(nombreArch("csv"), "﻿"+[CAMPOS_P.map(c=>qq(ENC[c])).join(";"), ...[...datos].sort(orden).map(r=>CAMPOS_P.map(c=>qq(r[c])).join(";"))].join("\r\n"), "text/csv;charset=utf-8"); };
+  q1("expX").onclick = async () => { try {
+    const X = await cargarXLSX();
+    const ws = X.utils.aoa_to_sheet([CAMPOS_P.map(c=>ENC[c]), ...[...datos].sort(orden).map(r=>CAMPOS_P.map(c => (c==="lat"||c==="lng") && conGps(r) ? Number(r[c]) : (r[c] ?? "")))]);
+    ws["!cols"] = CAMPOS_P.map(c=>({wch: Math.max(12, ENC[c].length+2)}));
+    const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, cfg.hoja); X.writeFile(wb, nombreArch("xlsx"));
+  } catch(e){ toast("❌ "+e.message); } };
+  q1("imp").onchange = async ev => {
+    const file = ev.target.files[0]; if (!file) return;
+    try {
+      const n = file.name.toLowerCase(); let rows = null, ds;
+      if (/\.xlsx?$/.test(n)) { const X = await cargarXLSX(); const wb = X.read(await file.arrayBuffer(), {type:"array"}); rows = X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, raw:false, defval:""}); }
+      else if (!n.endsWith(".json")) { const txt=(await file.text()).replace(/^﻿/,""); const sep=(txt.split("\n")[0].match(/;/g)||[]).length?";":","; rows = txt.split(/\r?\n/).map(l=>l.split(sep).map(x=>x.replace(/^"|"$/g,"").replace(/""/g,'"'))); }
+      if (rows) {
+        const norm = t => String(t).normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().trim();
+        const inv = Object.fromEntries(Object.entries(ENC).map(([k,v])=>[norm(v),k]));
+        const keys = rows.shift().map(h=>inv[norm(h)]||null);
+        ds = rows.filter(r=>r.some(x=>String(x).trim())).map(r=>{ const o={}; keys.forEach((k,i)=>{ if(k) o[k]=String(r[i]??"").trim(); }); return o; });
+      } else ds = JSON.parse(await file.text());
+      if (!Array.isArray(ds)) throw new Error("formato no válido");
+      let nuevos=0, act=0;
+      for (const d of ds) {
+        if (!d) continue;
+        if (d.lat!=null) { d.lat = arreglarCoord(d.lat, 90); d.lng = arreglarCoord(d.lng, 180); if (!d.lat || !d.lng) d.lat = d.lng = ""; }
+        const ex = d.codigo && datos.find(r=>(r.codigo||"").toUpperCase()===String(d.codigo).toUpperCase());
+        if (ex) { Object.assign(ex, d, {id:ex.id}); act++; }
+        else { const r = {id:nid(), lat:"",lng:"",prec:"",fechaGPS:"",observaciones:"", ...d}; datos.push(r); if (!r.codigo) r.codigo = generar(); nuevos++; }
+      }
+      guardarP(); datalists(); llenarFiltrosP(); render(); toast(`Importados: ${nuevos} nuevos, ${act} actualizados`);
+    } catch(e){ toast("❌ No se pudo leer el archivo: "+e.message); }
+    ev.target.value="";
+  };
+  datalists(); q1("codigo").value = generar();
+  return { abrir(){ llenarFiltrosP(); render(); if (!manual && !q1("id").value) q1("codigo").value = generar(); } };
+}
+const AREAS_SUG = [...UBICACIONES];
+const pestGen = crearPestanaPuntos({
+  tab:"generadores", p:"gen", key:"metrologia_generadores_v1", pref:"GEN", archivo:"generadores", hoja:"Generadores",
+  nuevo:"Nuevo generador", plural:"generadores", buscarTxt:"serie", colorBase:"#ef8f00",
+  msgGps:"En el celular activa la ubicación y párate junto al generador. Se toman varias lecturas y se queda la más precisa.",
+  campos:[{k:"area",label:"Área",req:true,opciones:AREAS_SUG,ph:"Ej: MH1"},{k:"serie",label:"Serie",ph:"Número de serie"}]
+});
+const COL_COMB = {"Diésel":"#6d4c41","Gasolina":"#e53935","GLP":"#1e88e5"};
+const pestComb = crearPestanaPuntos({
+  tab:"combustible", p:"comb", key:"metrologia_combustible_v1", pref:"COMB", archivo:"areas-combustible", hoja:"Áreas de combustible",
+  nuevo:"Nueva área de combustible", plural:"áreas", buscarTxt:"tipo de combustible", colorBase:"#8e24aa", color: r => COL_COMB[r.tipoComb],
+  msgGps:"En el celular activa la ubicación y párate en el área de combustible. Se toman varias lecturas y se queda la más precisa.",
+  campos:[{k:"area",label:"Área",req:true,opciones:AREAS_SUG,ph:"Ej: MANT"},{k:"tipoComb",label:"Tipo de combustible",req:true,opciones:["Diésel","Gasolina","GLP"],ph:"Diésel, Gasolina, GLP...",filtro:true,todos:"Todos los combustibles"}]
+});
 
 actualizarDatalists(); renderChips([]);
 </script>
