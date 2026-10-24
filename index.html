@@ -86,6 +86,7 @@ tr.actual td{background:color-mix(in srgb,var(--primary) 12%,transparent)}
     <button data-tab="banos">🚻 Baños</button>
     <button data-tab="generadores">⚡ Generadores</button>
     <button data-tab="combustible">⛽ Combustible</button>
+    <button data-tab="extintores">🧯 Extintores</button>
     <button data-tab="datos">💾 Datos</button>
   </nav>
 </header>
@@ -281,6 +282,7 @@ tr.actual td{background:color-mix(in srgb,var(--primary) 12%,transparent)}
 <!-- ============ GENERADORES / COMBUSTIBLE (se arman desde el script) ============ -->
 <section id="tab-generadores" class="hidden"></section>
 <section id="tab-combustible" class="hidden"></section>
+<section id="tab-extintores" class="hidden"></section>
 
 <!-- ============ DATOS ============ -->
 <section id="tab-datos" class="hidden">
@@ -382,12 +384,13 @@ function llenarFiltrosMag(){
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => irA(b.dataset.tab));
 function irA(tab){
   document.querySelectorAll("nav button").forEach(x => x.classList.toggle("active", x.dataset.tab===tab));
-  for (const t of ["form","list","mapa","banos","generadores","combustible","datos"]) $("#tab-"+t).classList.toggle("hidden", t!==tab);
+  for (const t of ["form","list","mapa","banos","generadores","combustible","extintores","datos"]) $("#tab-"+t).classList.toggle("hidden", t!==tab);
   if (tab==="list") { llenarFiltrosColumna(); renderLista(); }
   if (tab==="mapa") renderMapa();
   if (tab==="banos") { llenarFiltrosBanos(); renderBanos(); }
   if (tab==="generadores") pestGen.abrir();
   if (tab==="combustible") pestComb.abrir();
+  if (tab==="extintores") pestExt.abrir();
   window.scrollTo(0,0);
 }
 
@@ -1105,6 +1108,10 @@ function crearPestanaPuntos(cfg){
   const nid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,8);
   let datos = (() => { try { return JSON.parse(localStorage.getItem(cfg.key)) || []; } catch(e){ return []; } })();
   const guardarP = () => { try { localStorage.setItem(cfg.key, JSON.stringify(datos)); } catch(e){ toast("⚠️ No se pudo guardar en el navegador"); } };
+  if (cfg.base && !localStorage.getItem(cfg.key+"_sembrado")) {
+    cfg.base.forEach((b,i) => { const bid = cfg.p+"-base-"+(i+1); if (!datos.some(r=>r.id===bid)) datos.push({id:bid, ...b, lat:"",lng:"",prec:"",fechaGPS:"",observaciones:""}); });
+    guardarP(); try { localStorage.setItem(cfg.key+"_sembrado","1"); } catch(e){}
+  }
   const conGps = r => String(r.lat??"").trim()!=="" && isFinite(parseFloat(r.lat)) && isFinite(parseFloat(r.lng));
   const orden = (a,b) => (a.codigo||"").localeCompare(b.codigo||"",undefined,{numeric:true});
   const CAMPOS_P = ["codigo", ...cfg.campos.map(c=>c.k), "lat","lng","prec","fechaGPS","observaciones","actualizado"];
@@ -1146,6 +1153,7 @@ function crearPestanaPuntos(cfg){
     <div class="actions">
       <button type="submit" class="primary">💾 Guardar</button>
       <button type="button" id="${id("nuevo")}">Limpiar / nuevo</button>
+      ${cfg.base ? `<button type="button" id="${id("sig")}">⏭️ Siguiente sin coordenada</button>` : ""}
     </div>
   </form>
   <div class="card">
@@ -1255,10 +1263,16 @@ function crearPestanaPuntos(cfg){
     q1("titulo").textContent = cfg.nuevo; q1("codigo").value = generar(); q1("msg").textContent = cfg.msgGps;
   }
   q1("nuevo").onclick = limpiar;
+  if (cfg.base) q1("sig").onclick = () => {
+    const pend = [...datos].sort(orden).filter(r=>!conGps(r)), act = q1("id").value;
+    if (!pend.length) return toast("🎉 Todos tienen coordenada");
+    const i = pend.findIndex(r=>r.id===act), r = pend[(i+1) % pend.length];
+    editarP(r.id); toast(`${r.codigo} · ${pend.length} pendientes`);
+  };
   q1("f").onsubmit = ev => {
     ev.preventDefault();
     const rid = q1("id").value || nid(), codigo = q1("codigo").value.trim().toUpperCase();
-    if (datos.some(r=>r.id!==rid && (r.codigo||"").toUpperCase()===codigo)) return toast("⚠️ Ya existe el código "+codigo);
+    if (datos.some(r=>r.id!==rid && (r.codigo||"").toUpperCase()===codigo) && !(cfg.permitirDup && confirm("Ya existe otro registro con el código "+codigo+". ¿Guardar de todas formas?"))) return toast("⚠️ Ya existe el código "+codigo);
     const lat=q1("lat").value.trim().replace(",","."), lng=q1("lng").value.trim().replace(",",".");
     if ((lat||lng) && !(isFinite(parseFloat(lat)) && isFinite(parseFloat(lng)) && Math.abs(lat)<=90 && Math.abs(lng)<=180)) return toast("Coordenadas no válidas");
     const previo = datos.find(r=>r.id===rid), rec = {id:rid, codigo};
@@ -1365,7 +1379,7 @@ function crearPestanaPuntos(cfg){
       for (const d of ds) {
         if (!d) continue;
         if (d.lat!=null) { d.lat = arreglarCoord(d.lat, 90); d.lng = arreglarCoord(d.lng, 180); if (!d.lat || !d.lng) d.lat = d.lng = ""; }
-        const ex = d.codigo && datos.find(r=>(r.codigo||"").toUpperCase()===String(d.codigo).toUpperCase());
+        const ex = (d.id && datos.find(r=>r.id===d.id)) || (d.codigo && datos.find(r=>(r.codigo||"").toUpperCase()===String(d.codigo).toUpperCase()));
         if (ex) { Object.assign(ex, d, {id:ex.id}); act++; }
         else { const r = {id:nid(), lat:"",lng:"",prec:"",fechaGPS:"",observaciones:"", ...d}; datos.push(r); if (!r.codigo) r.codigo = generar(); nuevos++; }
       }
@@ -1389,6 +1403,13 @@ const pestComb = crearPestanaPuntos({
   nuevo:"Nueva área de combustible", plural:"áreas", buscarTxt:"tipo de combustible", colorBase:"#8e24aa", color: r => COL_COMB[r.tipoComb],
   msgGps:"En el celular activa la ubicación y párate en el área de combustible. Se toman varias lecturas y se queda la más precisa.",
   campos:[{k:"area",label:"Área",req:true,opciones:AREAS_SUG,ph:"Ej: MANT"},{k:"tipoComb",label:"Tipo de combustible",req:true,opciones:["Diésel","Gasolina","GLP"],ph:"Diésel, Gasolina, GLP...",filtro:true,todos:"Todos los combustibles"}]
+});
+const EXT_BASE = [{"codigo": "EXT-001", "area": "MH1", "ubicacion": "Oficina Monjas 1"}, {"codigo": "EXT-002", "area": "MANTENIMIENTO", "ubicacion": "Generador Monjas 1"}, {"codigo": "EXT-003", "area": "TRANSFORMACIÓN DIGITAL", "ubicacion": "Oficina de Sistemas"}, {"codigo": "EXT-004", "area": "CLASIFICACIÓN", "ubicacion": "Clasificación Blanco"}, {"codigo": "EXT-005", "area": "MANTENIMIENTO", "ubicacion": "Generador de Clasificación"}, {"codigo": "EXT-006", "area": "BODEGA", "ubicacion": "Cartonera (Provicional)"}, {"codigo": "EXT-007", "area": "BODEGA", "ubicacion": "Cartonera (CF-FUERA)"}, {"codigo": "EXT-008", "area": "BODEGA", "ubicacion": "Cartonera (Provicional)"}, {"codigo": "EXT-009", "area": "EMPAQUE", "ubicacion": "Empaque (Cuarto Frio)"}, {"codigo": "EXT-010", "area": "SALA BROTE", "ubicacion": "Sala de Brote A (A1)"}, {"codigo": "EXT-011", "area": "SALA BROTE", "ubicacion": "Sala de Brote A (A2)"}, {"codigo": "EXT-012", "area": "SALA BROTE", "ubicacion": "Sala Brote (B)"}, {"codigo": "EXT-013", "area": "SALA BROTE", "ubicacion": "Sala Brote (C)"}, {"codigo": "EXT-014", "area": "SALA BROTE", "ubicacion": "Clasificación Verde"}, {"codigo": "EXT-015", "area": "BODEGA", "ubicacion": "Bodega General"}, {"codigo": "EXT-016", "area": "DRONES", "ubicacion": "Bodega de DRONES"}, {"codigo": "EXT-017", "area": "BODEGA", "ubicacion": "Bodega de Desechos Peligrosos"}, {"codigo": "EXT-018", "area": "BODEGA", "ubicacion": "Bodega Fertilizantes"}, {"codigo": "EXT-019", "area": "MANTENIMIENTO", "ubicacion": "Generador Mantenimiento"}, {"codigo": "EXT-020", "area": "MANTENIMIENTO", "ubicacion": "Mantenimiento"}, {"codigo": "EXT-021", "area": "GARITA", "ubicacion": "Garita"}, {"codigo": "EXT-022", "area": "MANTENIMIENTO", "ubicacion": "Almacenamiento de Combustible"}, {"codigo": "EXT-023", "area": "MH2", "ubicacion": "Monjas 2"}, {"codigo": "EXT-024", "area": "COCINA", "ubicacion": "Cocina"}, {"codigo": "EXT-025", "area": "COCINA", "ubicacion": "Bodega Gas"}, {"codigo": "EXT-026", "area": "CONSULTORIO", "ubicacion": "Consultorio"}, {"codigo": "EXT-027", "area": "PROPAGACION", "ubicacion": "Propagación"}, {"codigo": "EXT-028", "area": "PROPAGACION", "ubicacion": "Propagación (Palmera)"}, {"codigo": "EXT-029", "area": "PROPAGACION", "ubicacion": "Propagación (Ambientador)"}, {"codigo": "EXT-030", "area": "MANTENIMIENTO", "ubicacion": "Generador Propagación (Área de Combustible)"}, {"codigo": "EXT-031", "area": "LABORATORIO", "ubicacion": "Laboratorio"}, {"codigo": "EXT-032", "area": "CULTIVOS VARIOS", "ubicacion": "Oficina Cultivos Varios"}, {"codigo": "EXT-033", "area": "TRANSFORMACIÓN DIGITAL", "ubicacion": "Gerencia Compras"}, {"codigo": "EXT-034", "area": "CLASIFICACIÓN", "ubicacion": "Tinturado"}, {"codigo": "EXT-035", "area": "", "ubicacion": "Generador de Sala Verde"}, {"codigo": "EXT-036", "area": "MANTENIMIENTO", "ubicacion": "Pambilera"}, {"codigo": "EXT-037", "area": "MANTENIMIENTO", "ubicacion": "Bodega de Combustible (Casilleros Fumigación)"}, {"codigo": "EXT-038", "area": "MANTENIMIENTO", "ubicacion": "Camion HINO ABN-3954"}, {"codigo": "EXT-039", "area": "MANTENIMIENTO", "ubicacion": "Camión HINO AGJ-0434"}, {"codigo": "EXT-040", "area": "", "ubicacion": "Camioneta Plata ABG-8079"}, {"codigo": "EXT-040", "area": "DON ISI", "ubicacion": "Minivan"}, {"codigo": "EXT-041", "area": "MANTENIMIENTO", "ubicacion": "Camioneta Great Wall Wingle 4x2 ABR-1234"}, {"codigo": "EXT-042", "area": "MANTENIMIENTO", "ubicacion": "Camioneta Great Wall Wingle 4x4 ABR-1245"}, {"codigo": "EXT-043", "area": "CLASIFICACIÓN", "ubicacion": "Preservado"}, {"codigo": "EXT-044", "area": "MANTENIMIENTO", "ubicacion": "Generador A-4"}, {"codigo": "EXT-045", "area": "SAN JUAN", "ubicacion": "Oficina A-4"}, {"codigo": "EXT-046", "area": "MANTENIMIENTO", "ubicacion": "Mantenimiento A-4"}, {"codigo": "EXT-047", "area": "SAN JUAN", "ubicacion": "Bodega de envases A-4"}];
+const pestExt = crearPestanaPuntos({
+  tab:"extintores", p:"ext", key:"metrologia_extintores_v1", pref:"EXT", archivo:"extintores", hoja:"Extintores",
+  nuevo:"Nuevo extintor", plural:"extintores", buscarTxt:"ubicación", colorBase:"#d32f2f", base:EXT_BASE, permitirDup:true,
+  msgGps:"Elige un extintor con ✏️ en la lista o con \"Siguiente sin coordenada\", párate junto a él y toma el GPS. Se toman varias lecturas y se queda la más precisa.",
+  campos:[{k:"area",label:"Área",opciones:AREAS_SUG,ph:"Ej: MANTENIMIENTO"},{k:"ubicacion",label:"Ubicación específica",req:true,ph:"Ej: Generador Monjas 1"}]
 });
 
 actualizarDatalists(); renderChips([]);
