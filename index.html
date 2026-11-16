@@ -72,6 +72,8 @@ th{color:var(--muted);font-size:12px;text-transform:uppercase}
 .sel-bano{font-size:16px;font-weight:700;margin:4px 0 10px}
 td.obs{white-space:normal;min-width:160px;max-width:320px}
 .pick-map{height:260px;border-radius:8px;margin-top:10px;display:none}
+.foto-prev{max-width:220px;max-height:220px;border-radius:8px;border:1px solid var(--line);display:block;margin-top:8px}
+.foto-mini{width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid var(--line);cursor:pointer;display:block}
 .map-puntos{height:420px;border-radius:10px}
 tr.actual td{background:color-mix(in srgb,var(--primary) 12%,transparent)}
 </style>
@@ -87,6 +89,7 @@ tr.actual td{background:color-mix(in srgb,var(--primary) 12%,transparent)}
     <button data-tab="generadores">⚡ Generadores</button>
     <button data-tab="combustible">⛽ Combustible</button>
     <button data-tab="extintores">🧯 Extintores</button>
+    <button data-tab="basureros">🗑️ Basureros</button>
     <button data-tab="datos">💾 Datos</button>
   </nav>
 </header>
@@ -283,6 +286,7 @@ tr.actual td{background:color-mix(in srgb,var(--primary) 12%,transparent)}
 <section id="tab-generadores" class="hidden"></section>
 <section id="tab-combustible" class="hidden"></section>
 <section id="tab-extintores" class="hidden"></section>
+<section id="tab-basureros" class="hidden"></section>
 
 <!-- ============ DATOS ============ -->
 <section id="tab-datos" class="hidden">
@@ -384,13 +388,14 @@ function llenarFiltrosMag(){
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => irA(b.dataset.tab));
 function irA(tab){
   document.querySelectorAll("nav button").forEach(x => x.classList.toggle("active", x.dataset.tab===tab));
-  for (const t of ["form","list","mapa","banos","generadores","combustible","extintores","datos"]) $("#tab-"+t).classList.toggle("hidden", t!==tab);
+  for (const t of ["form","list","mapa","banos","generadores","combustible","extintores","basureros","datos"]) $("#tab-"+t).classList.toggle("hidden", t!==tab);
   if (tab==="list") { llenarFiltrosColumna(); renderLista(); }
   if (tab==="mapa") renderMapa();
   if (tab==="banos") { llenarFiltrosBanos(); renderBanos(); }
   if (tab==="generadores") pestGen.abrir();
   if (tab==="combustible") pestComb.abrir();
   if (tab==="extintores") pestExt.abrir();
+  if (tab==="basureros") pestBas.abrir();
   window.scrollTo(0,0);
 }
 
@@ -1107,7 +1112,7 @@ function crearPestanaPuntos(cfg){
   const P = cfg.p, id = s => `${P}-${s}`, q1 = s => $("#"+id(s));
   const nid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,8);
   let datos = (() => { try { return JSON.parse(localStorage.getItem(cfg.key)) || []; } catch(e){ return []; } })();
-  const guardarP = () => { try { localStorage.setItem(cfg.key, JSON.stringify(datos)); } catch(e){ toast("⚠️ No se pudo guardar en el navegador"); } };
+  const guardarP = () => { try { localStorage.setItem(cfg.key, JSON.stringify(datos)); return true; } catch(e){ toast(cfg.foto ? "⚠️ Memoria del navegador llena: descarga el Respaldo JSON y borra fotos antiguas" : "⚠️ No se pudo guardar en el navegador"); return false; } };
   if (cfg.base && !localStorage.getItem(cfg.key+"_sembrado")) {
     cfg.base.forEach((b,i) => { const bid = cfg.p+"-base-"+(i+1); if (!datos.some(r=>r.id===bid)) datos.push({id:bid, ...b, lat:"",lng:"",prec:"",fechaGPS:"",observaciones:""}); });
     guardarP(); try { localStorage.setItem(cfg.key+"_sembrado","1"); } catch(e){}
@@ -1129,6 +1134,13 @@ function crearPestanaPuntos(cfg){
       <div><label for="${id("codigo")}">Código *</label><input id="${id("codigo")}" required>
         <div class="hint">Se genera solo (${cfg.pref}-001, ${cfg.pref}-002...). Puedes editarlo.</div></div>
     </div>
+    ${cfg.foto ? `<div style="margin-top:14px"><label>Foto</label>
+      <div class="actions" style="margin-top:4px">
+        <label class="small" style="display:inline-flex;align-items:center;gap:6px;margin:0;font-weight:600;cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:8px 12px;color:var(--text)">📷 Tomar / elegir foto<input type="file" id="${id("fotoIn")}" accept="image/*" style="display:none"></label>
+        <button type="button" class="small" id="${id("fotoDel")}" style="display:none">Quitar foto</button>
+      </div>
+      <div class="hint">La foto se reduce automáticamente para no llenar la memoria del celular.</div>
+      <img id="${id("fotoPrev")}" class="foto-prev" alt="" style="display:none"></div>` : ""}
     <div class="gps-box" style="margin-top:14px">
       <label>Geolocalización</label>
       <div class="grid">
@@ -1165,7 +1177,7 @@ function crearPestanaPuntos(cfg){
     </div>
     <div class="count" id="${id("count")}"></div>
     <div class="table-wrap"><table>
-      <thead><tr><th>Código</th>${cfg.campos.map(c=>`<th>${c.label}</th>`).join("")}<th>Latitud</th><th>Longitud</th><th>Precisión</th><th>Observaciones</th><th></th></tr></thead>
+      <thead><tr><th>Código</th>${cfg.campos.map(c=>`<th>${c.label}</th>`).join("")}${cfg.foto?"<th>Foto</th>":""}<th>Latitud</th><th>Longitud</th><th>Precisión</th><th>Observaciones</th><th></th></tr></thead>
       <tbody id="${id("tbody")}"></tbody>
     </table></div>
     <div class="cards" id="${id("cards")}"></div>
@@ -1255,10 +1267,26 @@ function crearPestanaPuntos(cfg){
     setTimeout(()=>pMap.invalidateSize(),50);
     q1("msg").textContent = "Toca el mapa o arrastra el marcador para fijar el punto.";
   };
+  /* ---- foto ---- */
+  let fotoAct = "";
+  function verFoto(v){ fotoAct = v||""; if (!cfg.foto) return; const im=q1("fotoPrev"); im.src = fotoAct; im.style.display = fotoAct?"block":"none"; q1("fotoDel").style.display = fotoAct?"":"none"; }
+  function comprimir(file, max=800, cal=0.5){
+    return new Promise((ok,mal) => { const url = URL.createObjectURL(file), im = new Image();
+      im.onload = () => { const k = Math.min(1, max/Math.max(im.width,im.height)), c = document.createElement("canvas");
+        c.width = Math.round(im.width*k); c.height = Math.round(im.height*k); c.getContext("2d").drawImage(im,0,0,c.width,c.height);
+        URL.revokeObjectURL(url); ok(c.toDataURL("image/jpeg", cal)); };
+      im.onerror = () => { URL.revokeObjectURL(url); mal(new Error("no se pudo leer la imagen")); }; im.src = url; });
+  }
+  if (cfg.foto) {
+    q1("fotoIn").onchange = async ev => { const file = ev.target.files[0]; if (!file) return;
+      try { const d = await comprimir(file); verFoto(d); toast(`📷 Foto lista (${Math.round(d.length*0.75/1024)} KB). Pulsa "Guardar".`); } catch(e){ toast("❌ "+e.message); }
+      ev.target.value=""; };
+    q1("fotoDel").onclick = () => verFoto("");
+  }
   /* ---- formulario ---- */
   function limpiar(){
     const area = q1("area").value, edit = q1("titulo").textContent.startsWith("Editar");
-    q1("f").reset(); q1("id").value=""; manual=false; delete q1("lat").dataset.fecha; quitarMarca();
+    q1("f").reset(); q1("id").value=""; manual=false; delete q1("lat").dataset.fecha; quitarMarca(); verFoto("");
     if (!edit) q1("area").value = area;
     q1("titulo").textContent = cfg.nuevo; q1("codigo").value = generar(); q1("msg").textContent = cfg.msgGps;
   }
@@ -1280,8 +1308,11 @@ function crearPestanaPuntos(cfg){
     rec.lat = lat ? (+lat).toFixed(6) : ""; rec.lng = lng ? (+lng).toFixed(6) : ""; rec.prec = lat ? q1("prec").value : "";
     rec.fechaGPS = lat ? (q1("lat").dataset.fecha || previo?.fechaGPS || new Date().toISOString()) : "";
     rec.observaciones = q1("obs").value.trim(); rec.actualizado = new Date().toISOString();
+    if (cfg.foto) rec.foto = fotoAct;
+    const copia = previo ? {...previo} : null;
     if (previo) Object.assign(previo, rec); else datos.push(rec);
-    guardarP(); datalists(); llenarFiltrosP(); render();
+    if (!guardarP()) { if (copia) Object.assign(previo, copia); else datos.pop(); return; }
+    datalists(); llenarFiltrosP(); render();
     toast((previo ? "✅ Actualizado " : "✅ Registrado ") + codigo + (lat ? "" : " (sin coordenada)"));
     limpiar();
   };
@@ -1289,7 +1320,7 @@ function crearPestanaPuntos(cfg){
     const r = datos.find(x=>x.id===rid); if (!r) return;
     q1("titulo").textContent = "Editar " + r.codigo; q1("id").value = r.id; q1("codigo").value = r.codigo; manual = true;
     for (const c of cfg.campos) q1(c.k).value = r[c.k] ?? "";
-    q1("lat").value=r.lat||""; q1("lng").value=r.lng||""; q1("prec").value=r.prec||""; q1("obs").value=r.observaciones||"";
+    q1("lat").value=r.lat||""; q1("lng").value=r.lng||""; q1("prec").value=r.prec||""; q1("obs").value=r.observaciones||""; verFoto(r.foto);
     delete q1("lat").dataset.fecha; quitarMarca();
     if (pMap && conGps(r) && q1("pickMap").style.display==="block") marcar(+r.lat,+r.lng,true);
     q1("f").scrollIntoView({behavior:"smooth",block:"start"});
@@ -1313,20 +1344,24 @@ function crearPestanaPuntos(cfg){
   }
   const acciones = r => `<button class="small" data-a="ed" data-id="${r.id}">✏️</button>` + (conGps(r)?` <button class="small" data-a="map" data-id="${r.id}">🗺️</button>`:"") + ` <button class="small danger" data-a="del" data-id="${r.id}">🗑️</button>`;
   const precTxt = r => r.prec ? (isNaN(r.prec) ? r.prec : "±"+r.prec+" m") : "";
+  const mini = r => r.foto ? `<img class="foto-mini" src="${r.foto}" data-foto="${r.id}" alt="foto ${esc(r.codigo)}">` : "";
   function render(){
     const l = lista(), con = datos.filter(conGps).length;
     q1("count").textContent = `${l.length} de ${datos.length} ${cfg.plural} · ${con} con coordenada · ${datos.length-con} sin coordenada`;
-    q1("tbody").innerHTML = l.map(r=>`<tr><td><b>${esc(r.codigo)}</b></td>${cfg.campos.map(c=>`<td>${esc(r[c.k])}</td>`).join("")}
+    q1("tbody").innerHTML = l.map(r=>`<tr><td><b>${esc(r.codigo)}</b></td>${cfg.campos.map(c=>`<td>${esc(r[c.k])}</td>`).join("")}${cfg.foto?`<td>${mini(r)||"—"}</td>`:""}
       <td>${esc(r.lat)||'<span class="badge b-pend">Pendiente</span>'}</td><td>${esc(r.lng)}</td><td>${esc(precTxt(r))}</td><td class="obs">${esc(r.observaciones)}</td><td>${acciones(r)}</td></tr>`).join("")
-      || `<tr><td colspan="${cfg.campos.length+6}">Sin registros.</td></tr>`;
+      || `<tr><td colspan="${cfg.campos.length+6+(cfg.foto?1:0)}">Sin registros.</td></tr>`;
     q1("cards").innerHTML = l.map(r=>`<div class="eq"><h3>${esc(r.codigo)}</h3>
       <div>${cfg.campos.map(c=>`<b>${c.label}:</b> ${esc(r[c.k]||"—")}`).join(" · ")}</div>
       <div class="meta">${conGps(r) ? `✅ ${esc(r.lat)}, ${esc(r.lng)} ${esc(precTxt(r))}` : "⚪ Sin coordenada"}</div>
       ${r.observaciones?`<div class="meta">📝 ${esc(r.observaciones)}</div>`:""}
+      ${r.foto?`<img class="foto-prev" src="${r.foto}" data-foto="${r.id}" alt="foto ${esc(r.codigo)}" style="max-width:100%;cursor:pointer">`:""}
       <div class="actions" style="margin-top:8px">${acciones(r)}</div></div>`).join("") || "<p>Sin registros.</p>";
     renderMapaP(l);
   }
   $("#tab-"+cfg.tab).addEventListener("click", ev => {
+    const fi = ev.target.closest("img[data-foto]");
+    if (fi) { const r = datos.find(x=>x.id===fi.dataset.foto); if (r?.foto) { const w = window.open(""); if (w) w.document.write(`<title>${esc(r.codigo)}</title><body style="margin:0;background:#111"><img src="${r.foto}" style="width:100%;height:auto">`); } return; }
     const b = ev.target.closest("button[data-a]"); if (!b) return;
     const a = b.dataset.a, rid = b.dataset.id;
     if (a==="ed") editarP(rid); else if (a==="del") eliminarP(rid);
@@ -1343,7 +1378,7 @@ function crearPestanaPuntos(cfg){
     const pts = l.filter(conGps);
     for (const r of pts) {
       const m = L.circleMarker([+r.lat,+r.lng],{radius:9,color:"#fff",weight:2,fillColor:(cfg.color && cfg.color(r)) || cfg.colorBase,fillOpacity:.95});
-      m.bindPopup(`<b>${esc(r.codigo)}</b><br>${cfg.campos.map(c=>`${c.label}: ${esc(r[c.k]||"—")}`).join("<br>")}<br><small>${(+r.lat).toFixed(6)}, ${(+r.lng).toFixed(6)}</small><br>
+      m.bindPopup(`<b>${esc(r.codigo)}</b><br>${cfg.campos.map(c=>`${c.label}: ${esc(r[c.k]||"—")}`).join("<br>")}${r.foto?`<br><img src="${r.foto}" style="width:180px;border-radius:6px;margin-top:4px">`:""}<br><small>${(+r.lat).toFixed(6)}, ${(+r.lng).toFixed(6)}</small><br>
         <a href="https://www.google.com/maps?q=${+r.lat},${+r.lng}" target="_blank" rel="noopener">Abrir en Google Maps</a>`);
       m.bindTooltip(esc(r.codigo+" · "+(r.area||""))); m.addTo(grupo); marcas[r.id]=m;
     }
@@ -1410,6 +1445,12 @@ const pestExt = crearPestanaPuntos({
   nuevo:"Nuevo extintor", plural:"extintores", buscarTxt:"ubicación", colorBase:"#d32f2f", base:EXT_BASE, permitirDup:true,
   msgGps:"Elige un extintor con ✏️ en la lista o con \"Siguiente sin coordenada\", párate junto a él y toma el GPS. Se toman varias lecturas y se queda la más precisa.",
   campos:[{k:"area",label:"Área",opciones:AREAS_SUG,ph:"Ej: MANTENIMIENTO"},{k:"ubicacion",label:"Ubicación específica",req:true,ph:"Ej: Generador Monjas 1"}]
+});
+const pestBas = crearPestanaPuntos({
+  tab:"basureros", p:"bas", key:"metrologia_basureros_v1", pref:"BAS", archivo:"basureros", hoja:"Basureros",
+  nuevo:"Nuevo basurero", plural:"basureros", buscarTxt:"descripción", colorBase:"#2e7d32", foto:true,
+  msgGps:"Párate junto al basurero, toma la foto y luego el GPS. Se toman varias lecturas y se queda la más precisa.",
+  campos:[{k:"area",label:"Nombre del área",req:true,opciones:AREAS_SUG,ph:"Ej: MANTENIMIENTO"},{k:"descripcion",label:"Descripción del sitio",ph:"Ej: Junto a la puerta de la bodega"}]
 });
 
 actualizarDatalists(); renderChips([]);
